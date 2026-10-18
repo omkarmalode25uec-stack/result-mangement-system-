@@ -21,15 +21,55 @@ import {
   FICTIONAL_STUDENTS, 
   GRADING_SCALE 
 } from '../data/fictionalData';
+import { useAuth } from '../context/AuthContext';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function MarksheetPreview({ setCurrentView, selectedPrn, setSelectedPrn }) {
-  const [activePrn, setActivePrn] = useState(selectedPrn || '22UCO01042');
+  const { user } = useAuth();
+  const effectivePrn = (user && user.role === 'Student' && user.prn) ? user.prn : (selectedPrn || '22UCO01042');
+  const [activePrn, setActivePrn] = useState(effectivePrn);
   const [showWithheldEmptyState, setShowWithheldEmptyState] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
 
   const marksheet = FICTIONAL_MARKSHEETS[activePrn];
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    setDownloadError(null);
+    try {
+      const url = `${API_BASE}/marksheet/${encodeURIComponent(activePrn)}/pdf?semester=5`;
+      const res = await fetch(url, { credentials: 'include' });
+
+      if (!res.ok) {
+        let errMsg = 'Failed to generate Statement of Grades PDF.';
+        try {
+          const errData = await res.json();
+          errMsg = errData.message || errMsg;
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `Statement_of_Grades_${activePrn}_Sem5.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.warn('[MarksheetPreview] PDF Download Notice:', err.message);
+      setDownloadError(err.message);
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   return (
@@ -56,7 +96,7 @@ export default function MarksheetPreview({ setCurrentView, selectedPrn, setSelec
                 } else {
                   setShowWithheldEmptyState(false);
                   setActivePrn(e.target.value);
-                  setSelectedPrn(e.target.value);
+                  if (setSelectedPrn) setSelectedPrn(e.target.value);
                 }
               }}
               className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800"
@@ -70,14 +110,48 @@ export default function MarksheetPreview({ setCurrentView, selectedPrn, setSelec
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+            title="Download authoritative vector PDF from server"
+          >
+            {downloadingPdf ? (
+              <>
+                <RotateCcw className="w-4 h-4 animate-spin" />
+                <span>Generating...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span>Download Official PDF</span>
+              </>
+            )}
+          </button>
+
+          <button
             onClick={handlePrint}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>Print / Save PDF</span>
+            <span>Print View</span>
           </button>
         </div>
       </div>
+
+      {downloadError && (
+        <div className="no-print p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-800">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{downloadError}</span>
+          </div>
+          <button 
+            onClick={() => setDownloadError(null)}
+            className="text-xs font-bold text-red-900 hover:underline ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Fictional Data Academic Watermark Notice (Screen Only) */}
       <div className="no-print p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs text-amber-900">

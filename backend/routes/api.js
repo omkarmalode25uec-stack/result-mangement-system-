@@ -6,6 +6,7 @@ import { Subject } from '../models/Subject.js';
 import { AcademicSession } from '../models/AcademicSession.js';
 import { FacultyAssignment } from '../models/FacultyAssignment.js';
 import { authenticate, authorize, enforceStudentRecordAccess } from '../middleware/auth.js';
+import { generateStatementOfGradesPDF } from '../services/pdfService.js';
 
 const router = express.Router();
 
@@ -176,9 +177,15 @@ router.get(
   async (req, res) => {
     try {
       const prn = req.params.prn.toUpperCase();
-      let marksheet = await ResultRecord.findOne({ prn }).sort({ createdAt: -1 }).lean();
+      const { academicYear, semester } = req.query;
 
-      // Stage 6 Publication Rules:
+      const query = { prn };
+      if (academicYear) query.academicYear = academicYear.trim();
+      if (semester) query.semester = Number(semester);
+
+      let marksheet = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
+
+      // Stage 6/7 Publication Rules:
       // 1. Draft results must never be visible to students.
       // 2. Submitted results must remain private.
       // 3. Approved results remain private until published.
@@ -227,9 +234,15 @@ router.get('/marksheet-me', authenticate, async (req, res) => {
     }
 
     const prn = req.user.prn.toUpperCase();
-    let marksheet = await ResultRecord.findOne({ prn }).sort({ createdAt: -1 }).lean();
+    const { academicYear, semester } = req.query;
 
-    // Stage 6 Publication Rules:
+    const query = { prn };
+    if (academicYear) query.academicYear = academicYear.trim();
+    if (semester) query.semester = Number(semester);
+
+    let marksheet = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
+
+    // Stage 6/7 Publication Rules:
     // Block student from accessing unpublished, draft, submitted, or approved results
     if (marksheet && !marksheet.isPublished) {
       return res.status(403).json({
@@ -257,7 +270,245 @@ router.get('/marksheet-me', authenticate, async (req, res) => {
   }
 });
 
-// 10. Public sample marksheet preview (for landing page showcase demonstration)
+// 10. Student Academic Terms & Semester Progression Route
+router.get('/student/terms', authenticate, enforceStudentRecordAccess, async (req, res) => {
+  try {
+    let prn = (req.query.prn || req.user.prn || '22UCO01042').trim().toUpperCase();
+
+    const student = await StudentProfile.findOne({ prn }).lean();
+    const currentSem = student ? student.currentSemester : 5;
+    const records = await ResultRecord.find({ prn }).lean();
+
+    const termsMap = new Map();
+    records.forEach((r) => {
+      termsMap.set(r.semester, r);
+    });
+
+    const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+    const terms = [];
+
+    for (let sem = 1; sem <= 8; sem++) {
+      const semLabel = `Semester ${romanNumerals[sem - 1]}`;
+      const record = termsMap.get(sem);
+
+      if (record && record.isPublished) {
+        terms.push({
+          semester: sem,
+          id: `Sem ${sem}`,
+          label: sem === currentSem ? `${semLabel} (Current)` : semLabel,
+          academicYear: record.academicYear,
+          status: 'Declared',
+          isPublished: true,
+          sgpa: record.sgpa ? record.sgpa.toFixed(2) : '0.00',
+          cgpa: record.cgpa ? record.cgpa.toFixed(2) : null,
+          totalCR: record.totalCR,
+          totalEC: record.totalEC,
+          totalGP: record.totalGP,
+          resultStatus: record.resultStatus,
+          resultDate: record.resultDate,
+        });
+      } else if (record && !record.isPublished) {
+        terms.push({
+          semester: sem,
+          id: `Sem ${sem}`,
+          label: sem === currentSem ? `${semLabel} (Current)` : semLabel,
+          academicYear: record.academicYear,
+          status: 'Pending Moderation',
+          isPublished: false,
+          reviewStatus: record.reviewStatus || 'Draft',
+          sgpa: null, // Strictly hidden prior to publication
+        });
+      } else if (sem < currentSem) {
+        terms.push({
+          semester: sem,
+          id: `Sem ${sem}`,
+          label: semLabel,
+          status: 'Archived',
+          isPublished: false,
+        });
+      } else if (sem === currentSem) {
+        terms.push({
+          semester: sem,
+          id: `Sem ${sem}`,
+          label: `${semLabel} (Current)`,
+          status: 'In Progress',
+          isPublished: false,
+        });
+      } else {
+        terms.push({
+          semester: sem,
+          id: `Sem ${sem}`,
+          label: semLabel,
+          status: 'Upcoming Term',
+          isPublished: false,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      prn,
+      student,
+      currentSemester: currentSem,
+      terms,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 11. Student Specific Term Result (Protected & Enforced)
+router.get('/student/result', authenticate, enforceStudentRecordAccess, async (req, res) => {
+  try {
+    let prn = (req.query.prn || req.user.prn || '22UCO01042').trim().toUpperCase();
+
+    const { academicYear, semester } = req.query;
+    const query = { prn };
+    if (academicYear) query.academicYear = academicYear.trim();
+    if (semester) query.semester = Number(semester);
+
+    const record = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: `No result record found for PRN ${prn} in the specified term.`,
+      });
+    }
+
+    // Publication gate: Never expose unpublished results to students
+    if (req.user.role === 'Student' && !record.isPublished) {
+      return res.status(403).json({
+        success: false,
+        message: `Examination results for Semester ${record.semester} (${record.academicYear}) are currently under moderation/review and have not been published yet.`,
+        reviewStatus: record.reviewStatus || 'Draft',
+        isPublished: false,
+      });
+    }
+
+    res.json({
+      success: true,
+      college: collegeInfo,
+      data: record,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 12. Server-Side Statement of Grades PDF Download (by PRN)
+// Protected & Enforced: Only student themselves or admin can download verified PDF
+router.get(
+  '/marksheet/:prn/pdf',
+  authenticate,
+  enforceStudentRecordAccess,
+  async (req, res) => {
+    try {
+      const prn = req.params.prn.toUpperCase();
+      const { academicYear, semester } = req.query;
+
+      const query = { prn };
+      if (academicYear) query.academicYear = academicYear.trim();
+      if (semester) query.semester = Number(semester);
+
+      const record = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
+
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+          message: `No Statement of Grades found for PRN: ${prn}.`,
+        });
+      }
+
+      // Security Invariant: NEVER expose unpublished results through PDF
+      if (!record.isPublished) {
+        return res.status(403).json({
+          success: false,
+          message: `Cannot download PDF: Examination results for PRN ${prn} are currently under moderation/review and have not been published yet.`,
+          reviewStatus: record.reviewStatus || 'Draft',
+          isPublished: false,
+        });
+      }
+
+      const student = await StudentProfile.findOne({ prn }).lean();
+
+      // Generate server-validated PDF
+      const pdfBuffer = await generateStatementOfGradesPDF({
+        result: record,
+        student,
+        college: collegeInfo,
+      });
+
+      const semNum = record.semester || 5;
+      const filename = `Statement_of_Grades_${prn}_Sem${semNum}.pdf`;
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.end(pdfBuffer);
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// 13. Shortcut: Logged-in Student downloads own PDF directly
+router.get('/marksheet-me/pdf', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'Student' || !req.user.prn) {
+      return res.status(400).json({
+        success: false,
+        message: 'This endpoint is for authenticated students only.',
+      });
+    }
+
+    const prn = req.user.prn.toUpperCase();
+    const { academicYear, semester } = req.query;
+
+    const query = { prn };
+    if (academicYear) query.academicYear = academicYear.trim();
+    if (semester) query.semester = Number(semester);
+
+    const record = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: `No Statement of Grades found for PRN: ${prn}.`,
+      });
+    }
+
+    // Security Invariant: NEVER expose unpublished results through PDF
+    if (!record.isPublished) {
+      return res.status(403).json({
+        success: false,
+        message: `Cannot download PDF: Your examination results are currently under moderation/review and have not been published yet.`,
+        reviewStatus: record.reviewStatus || 'Draft',
+        isPublished: false,
+      });
+    }
+
+    const student = await StudentProfile.findOne({ prn }).lean();
+
+    const pdfBuffer = await generateStatementOfGradesPDF({
+      result: record,
+      student,
+      college: collegeInfo,
+    });
+
+    const semNum = record.semester || 5;
+    const filename = `Statement_of_Grades_${prn}_Sem${semNum}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.end(pdfBuffer);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 14. Public sample marksheet preview (for landing page showcase demonstration)
 router.get('/public-preview/:prn', (req, res) => {
   const prn = req.params.prn.toUpperCase();
   const sample = sampleMarksheets[prn];
