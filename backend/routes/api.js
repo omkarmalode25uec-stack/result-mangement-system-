@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { collegeInfo, sampleStudents, sampleMarksheets } from '../data/sampleData.js';
 import { StudentProfile } from '../models/StudentProfile.js';
 import { ResultRecord } from '../models/ResultRecord.js';
@@ -10,12 +11,20 @@ import { generateStatementOfGradesPDF } from '../services/pdfService.js';
 
 const router = express.Router();
 
-// 1. Health Check (Public)
+// 1. Health Check (Public & Production-Ready)
 router.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
+  const dbConnected = mongoose.connection.readyState === 1;
+  res.status(dbConnected ? 200 : 503).json({
+    status: dbConnected ? 'ok' : 'degraded',
     system: 'Sanjivani College of Engineering - Result Management System (RMS)',
-    stage: 'Stage 2: Authentication and Database',
+    stage: 'Stage 8: Final Audit and Deployment',
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    uptimeSeconds: Math.floor(process.uptime()),
+    database: {
+      status: dbConnected ? 'connected' : 'disconnected',
+      readyState: mongoose.connection.readyState,
+    },
     timestamp: new Date().toISOString(),
   });
 });

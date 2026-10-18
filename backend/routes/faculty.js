@@ -389,7 +389,7 @@ async function validateMarksArray(marksList, subject, isFinalSubmission = false)
   for (let idx = 0; idx < marksList.length; idx++) {
     const entry = marksList[idx];
     const rowNum = idx + 1;
-    const prn = (entry.prn || '').trim().toUpperCase();
+    const prn = (entry.prn || entry.studentPrn || '').trim().toUpperCase();
 
     // 1. Validate PRN
     if (!prn) {
@@ -413,10 +413,11 @@ async function validateMarksArray(marksList, subject, isFinalSubmission = false)
     seenPrns.add(prn);
 
     // 2. Validate Internal Marks
+    const rawInternal = entry.internalMarks !== undefined ? entry.internalMarks : entry.internalMarksObtained;
     const hasInternal =
-      entry.internalMarks !== null &&
-      entry.internalMarks !== undefined &&
-      entry.internalMarks !== '';
+      rawInternal !== null &&
+      rawInternal !== undefined &&
+      rawInternal !== '';
 
     if (isFinalSubmission && !hasInternal) {
       errors.push({
@@ -426,7 +427,7 @@ async function validateMarksArray(marksList, subject, isFinalSubmission = false)
         message: `Row ${rowNum} (${prn}): Internal marks are required before submitting for review.`,
       });
     } else if (hasInternal) {
-      const numInternal = Number(entry.internalMarks);
+      const numInternal = Number(rawInternal);
       if (isNaN(numInternal)) {
         errors.push({
           row: rowNum,
@@ -452,10 +453,11 @@ async function validateMarksArray(marksList, subject, isFinalSubmission = false)
     }
 
     // 3. Validate Final Examination (ESE) Marks
+    const rawEse = entry.eseMarks !== undefined ? entry.eseMarks : (entry.finalMarksObtained !== undefined ? entry.finalMarksObtained : entry.finalMarks);
     const hasEse =
-      entry.eseMarks !== null &&
-      entry.eseMarks !== undefined &&
-      entry.eseMarks !== '';
+      rawEse !== null &&
+      rawEse !== undefined &&
+      rawEse !== '';
 
     if (isFinalSubmission && !hasEse) {
       errors.push({
@@ -465,7 +467,7 @@ async function validateMarksArray(marksList, subject, isFinalSubmission = false)
         message: `Row ${rowNum} (${prn}): Final examination marks are required before submitting for review.`,
       });
     } else if (hasEse) {
-      const numEse = Number(entry.eseMarks);
+      const numEse = Number(rawEse);
       if (isNaN(numEse)) {
         errors.push({
           row: rowNum,
@@ -502,7 +504,8 @@ async function validateMarksArray(marksList, subject, isFinalSubmission = false)
  */
 router.post('/marks/save-draft', async (req, res) => {
   try {
-    const { subjectId, academicYear, semester, division, marks } = req.body;
+    const { subjectId, academicYear, semester, division } = req.body;
+    const marks = req.body.marks || req.body.marksData || [];
 
     if (!subjectId || !academicYear || semester === undefined) {
       return res.status(400).json({
@@ -572,23 +575,26 @@ router.post('/marks/save-draft', async (req, res) => {
     // 4. Process and upsert each entry
     const savedRecords = [];
     for (const entry of marks) {
-      const prn = entry.prn.trim().toUpperCase();
+      const prn = (entry.prn || entry.studentPrn || '').trim().toUpperCase();
       const student = await StudentProfile.findOne({ prn });
       if (!student) {
         continue; // Skip unrecognized PRNs or could report error
       }
 
-      const hasInternal =
-        entry.internalMarks !== null &&
-        entry.internalMarks !== undefined &&
-        entry.internalMarks !== '';
-      const hasEse =
-        entry.eseMarks !== null &&
-        entry.eseMarks !== undefined &&
-        entry.eseMarks !== '';
+      const rawInternal = entry.internalMarks !== undefined ? entry.internalMarks : entry.internalMarksObtained;
+      const rawEse = entry.eseMarks !== undefined ? entry.eseMarks : (entry.finalMarksObtained !== undefined ? entry.finalMarksObtained : entry.finalMarks);
 
-      const numInternal = hasInternal ? Number(entry.internalMarks) : null;
-      const numEse = hasEse ? Number(entry.eseMarks) : null;
+      const hasInternal =
+        rawInternal !== null &&
+        rawInternal !== undefined &&
+        rawInternal !== '';
+      const hasEse =
+        rawEse !== null &&
+        rawEse !== undefined &&
+        rawEse !== '';
+
+      const numInternal = hasInternal ? Number(rawInternal) : null;
+      const numEse = hasEse ? Number(rawEse) : null;
 
       // Calculate official total on backend
       let officialTotal = null;
@@ -653,7 +659,8 @@ router.post('/marks/save-draft', async (req, res) => {
  */
 router.post('/marks/submit', async (req, res) => {
   try {
-    const { subjectId, academicYear, semester, division, marks } = req.body;
+    const { subjectId, academicYear, semester, division } = req.body;
+    const marks = req.body.marks || req.body.marksData || [];
 
     if (!subjectId || !academicYear || semester === undefined) {
       return res.status(400).json({
@@ -725,14 +732,17 @@ router.post('/marks/submit', async (req, res) => {
     const submissionTimestamp = new Date();
 
     for (const entry of marks) {
-      const prn = entry.prn.trim().toUpperCase();
+      const prn = (entry.prn || entry.studentPrn || '').trim().toUpperCase();
       const student = await StudentProfile.findOne({ prn });
       if (!student) {
         continue;
       }
 
-      const numInternal = Number(entry.internalMarks);
-      const numEse = Number(entry.eseMarks);
+      const rawInternal = entry.internalMarks !== undefined ? entry.internalMarks : entry.internalMarksObtained;
+      const rawEse = entry.eseMarks !== undefined ? entry.eseMarks : (entry.finalMarksObtained !== undefined ? entry.finalMarksObtained : entry.finalMarks);
+
+      const numInternal = Number(rawInternal);
+      const numEse = Number(rawEse);
       // Official total calculated on backend
       const totalMarks = numInternal + numEse;
       const attempt = Number(entry.attempt || 1);

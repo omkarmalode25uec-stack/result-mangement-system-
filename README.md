@@ -440,39 +440,67 @@ $$(\text{with Return for Correction loop: } \mathbf{Submitted} \longrightarrow \
 
 ---
 
-## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, 4, 5, 6 & 7)
+---
 
-Run all test suites across authentication, database, administrative operations, faculty marks evaluation, the automatic result calculation engine, result review/publication, and student portal/PDF generation:
+## 🚀 Stage 8: Final Audit, Reliability & Deployment
+
+### 1. Functional & Security Audit
+- **Full-Stack Authentication Audit:** Verified secure bcrypt password hashing, HTTP-only JWT sessions, role authorization for Student, Faculty, and Admin, and complete masking of `passwordHash` and salts across all public/authenticated responses.
+- **Role Isolation & Boundaries:** Thorough verification that students cannot access administrative directories or faculty assignment rosters, and faculty cannot access administrative provisioning or publication tools.
+- **Cross-Student Privacy:** Confirmed that students cannot view, query, or download another student's marksheet or academic history (`403 Forbidden`).
+- **Faculty Subject Isolation:** Strict enforcement blocking faculty members from viewing rosters or entering marks for subjects not assigned to them (`403 Forbidden`).
+- **Input Validation & Boundary Testing:** Validated row-level error reporting rejecting negative marks, exceeding configured maximums (internal/ESE), non-numeric inputs, and duplicate PRNs.
+- **Result Gating & Immutability:** Strict four-tier lifecycle (`Draft` $\rightarrow$ `Submitted` $\rightarrow$ `Approved` $\rightarrow$ `Published`). Draft, submitted, and unapproved records are completely withheld from student access and PDF generation.
+- **Audited Post-Publication Corrections:** Validated that any modification to published results requires COE administrator authorization, enforces mark boundaries, recalculates SGPA/CGPA, and creates an immutable audit trail entry recording before/after values and justification reasons.
+- **Reliability & Edge Cases:** Verified graceful `404 Not Found` responses without unhandled crashes when querying non-existent student PRNs, invalid semesters, or empty rosters.
+- **Production Readiness:**
+  - Enhanced health check (`GET /api/health`) reporting uptime, environment, version, and MongoDB connection status.
+  - Multi-origin CORS support for decoupled hosting environments.
+  - Dedicated production deployment guide in [DEPLOYMENT.md](file:///c:/omkar/RMS/DEPLOYMENT.md).
+
+---
+
+## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, 4, 5, 6, 7 & 8)
+
+Run all test suites across authentication, database, administrative operations, faculty marks evaluation, the automatic result calculation engine, result review/publication, student portal/PDF generation, and the Stage 8 system reliability audit:
 ```bash
-# Run all Stage 2, 3, 4, 5, 6, and 7 tests
+# Run all Stage 2 through 8 automated tests
 npm test
 ```
-The test suite validates **245 combined assertions**:
+The test suite validates **292 combined assertions**:
 - [x] **Stage 2 (21 tests):** Server health, authentication, cookies, role security, student privacy, duplicate PRNs, logout.
 - [x] **Stage 3 (29 tests):** Student CRUD, deactivation with history preservation, faculty management, credit validation, mark limits, semester match validation, faculty allocations, duplicate assignment prevention, batch CSV import error reports, and table pagination/search.
 - [x] **Stage 4 (43 tests):** Faculty authentication, RBAC authorization, faculty profile, assigned subjects isolation, unassigned subject 403 prevention, eligible student loading, negative mark rejection, limit violation rejection, non-numeric rejection, duplicate PRN in batch rejection, draft saving, backend official total calculation, draft editing/correction, duplicate prevention for student/subject/attempt, incomplete submission rejection, batch submit for review, result non-publishing safety invariant, and draft reopening.
 - [x] **Stage 5 (73 tests):** Total marks calculation (internal + ese), boundary marks (0 & 100), negative marks rejection, exceeding limits rejection, every grade boundary test (O, A+, A, B+, B, C, F), confirmed vs provisional status verification, scheme boundary validation (overlapping ranges rejected, gap detection, inverted ranges rejected, 0% coverage check), rounding conventions (Half-Up vs Truncate), credit points calculation, earned credits on pass/fail, full SGPA calculation with exact reference marksheet match ($183 / 21 = 8.71$), missing marks detection, API endpoints for schemes and calculation, cohort calculation, recalculation after marks corrections, and the strict unpublished result invariant.
 - [x] **Stage 6 (48 tests):** Multi-role authentication, assigned course inspection, Draft save, Draft student privacy invariant (403), Submit for review, Submitted privacy invariant (403), Admin batches queue inspection, Return for correction without reason rejection (400), Return for correction with mandatory reason, Faculty roster unlocking for correction, Corrected marks resubmission, Return reason clearing, Admin course batch approval, Lock enforcement blocking faculty edit/reopen on approved batches (403), Approved privacy invariant (403), Rejection of unapproved batch publication (400/404), Faculty/Student unauthorized publication rejection (403), Authorized batch publication, Published marksheet access (200), Cross-student access rejection (403), Post-publication correction without reason rejection (400), Authorized post-publication correction and SGPA recalculation, Updated marksheet access, Unpublish without reason rejection (400), Authorized unpublish and immediate student access restriction (403), Publication restoration, and Immutable Audit Trail verification (`SUBMITTED_FOR_REVIEW`, `APPROVED`, `RETURNED_FOR_CORRECTION`, `PUBLISHED`, `UNPUBLISHED`, `CORRECTED_POST_PUBLICATION`, with full metadata audit).
 - [x] **Stage 7 (31 tests):** Student authentication, profile retrieval, multi-term academic progression, authoritative published semester result query, privacy enforcement on unpublished terms (403), A4 vector PDF generation, PDF headers (`application/pdf`, attachment filename, `%PDF-` magic bytes, buffer > 5KB), student self-download endpoint (`/api/marksheet-me/pdf`), cross-student PDF download block (403), cross-student result query block (403), unpublished PDF generation block (403), unauthenticated access rejection (401), and admin privileged marksheet PDF download.
+- [x] **Stage 8 (47 tests):** Sensitive data masking (no `passwordHash` in login or `/me`), failed login error masking, RBAC cross-role blocks, cross-student result/terms/PDF isolation, unassigned subject marks block, negative/exceeding/non-numeric marks rejection with 400 Bad Request, mathematical SGPA/CR/EC/GP invariants, unpublished terms privacy withholding, A4 PDF header & buffer integrity, non-existent PRN 404 handling, unauthorized post-publication correction block (403), mandatory correction reason validation (400), immutable audit trail verification, and production health check diagnostics (`status: 'ok'`, database connectivity, uptime).
 
 ---
 
-## 🚀 Startup Commands
+## 🚀 Startup & Build Commands
 
-### Run Full-Stack Concurrently
+### Run Full-Stack Concurrently (Development)
 ```bash
 npm run dev
 ```
 - **Frontend:** [http://localhost:5173](http://localhost:5173)
 - **Backend API:** [http://localhost:5000](http://localhost:5000)
+- **API Health Check:** [http://localhost:5000/api/health](http://localhost:5000/api/health)
 
-### Run Automated Tests
+### Run Master Automated Test Suite
 ```bash
 npm test
 ```
 
-### Build Frontend
+### Build Frontend for Production
 ```bash
 npm run build
 ```
+
+---
+
+## 📖 Production Deployment Guide
+For complete instructions on Nginx reverse proxy configuration, MongoDB Atlas clustering, environment variables, database backup/recovery scripts, and launch checklists, refer to **[DEPLOYMENT.md](file:///c:/omkar/RMS/DEPLOYMENT.md)**.
+
 

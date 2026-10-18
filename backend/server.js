@@ -27,11 +27,23 @@ connectDB().then(() => {
   seedDatabase();
 });
 
-// Middleware
+// CORS Configuration: Supports single origin, multiple comma-separated origins, and credentialed requests
+const allowedClientOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true, // Crucial for HTTP-only cookies
+    origin: (origin, callback) => {
+      // Allow non-browser requests (tools, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedClientOrigins.includes('*') || allowedClientOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin '${origin}' not authorized by CORS policy.`));
+    },
+    credentials: true, // Enables cookies and authorization headers
   })
 );
 app.use(cookieParser());

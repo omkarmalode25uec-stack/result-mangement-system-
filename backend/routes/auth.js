@@ -25,10 +25,11 @@ const setAuthCookie = (res, user) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 
+  const isProduction = process.env.NODE_ENV === 'production';
   const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProduction,
+    sameSite: process.env.COOKIE_SAMESITE || (isProduction ? 'none' : 'lax'),
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
   };
@@ -143,10 +144,11 @@ router.post('/login', async (req, res) => {
  * Clears the authentication cookie
  */
 router.post('/logout', (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
   res.clearCookie(process.env.COOKIE_NAME || 'rms_token', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProduction,
+    sameSite: process.env.COOKIE_SAMESITE || (isProduction ? 'none' : 'lax'),
     path: '/',
   });
 
