@@ -236,16 +236,64 @@ npm test
 
 ---
 
-## 🧪 Automated Test Suite (Stages 2 & 3)
+## 📝 Stage 4: Faculty Marks Entry Workflow
 
-Run all test suites across authentication, database, security, and administrative features:
+### 1. Workflow Features Implemented
+- **Authorized Course Roster:** Faculty logs in and sees **only** subjects officially allocated to them via `FacultyAssignment`. Unassigned subjects are strictly blocked.
+- **Dynamic Student Roster:** Selecting academic year, semester, subject, and division queries `StudentProfile` and loads all eligible candidates.
+- **Granular Marks Entry Table:**
+  - Student PRN and Name
+  - Internal marks obtained and maximum (e.g. `28 / 30`)
+  - Final Examination (ESE) marks obtained and maximum (e.g. `62 / 70`)
+  - Total marks obtained and maximum (e.g. `90 / 100`)
+  - Live academic grade and percentage preview
+  - Real-time row validation status (`Saved as Draft`, `Submitted for Review`, `Unsaved Changes`, `Pending Entry`, `Error`)
+  - Student Statement of Grades preview shortcut
+- **Official Backend Calculations:**
+  - Frontend calculations serve as immediate visual guidance for the evaluator.
+  - Official total marks (`totalMarks = internalMarks + eseMarks`) are computed on the backend server upon draft save or submission.
+- **Strict Range & Integrity Validation:**
+  - Internal marks validated against subject configured maximum ($0 \le \text{internal} \le \text{maxInternalMarks}$).
+  - Final examination marks validated against subject configured maximum ($0 \le \text{ese} \le \text{maxEseMarks}$).
+  - Negative marks, values exceeding limits, and non-numeric inputs are rejected with detailed row-level error reports (`{ prn, field, message }`).
+  - Duplicate PRN entries within the same submission batch are detected and rejected.
+- **Unassigned Subject Access Prevention:**
+  - Every faculty endpoint verifies active allocation records in `FacultyAssignment`.
+  - Attempts to view students or enter marks for unassigned subjects return `403 Forbidden`.
+- **Duplicate Prevention Invariant:**
+  - MongoDB compound unique index `{ student: 1, subject: 1, academicYear: 1, semester: 1, attempt: 1 }` prevents duplicate mark records for the same student, course, and exam attempt.
+- **Draft & Submitted States (No Automatic Publishing):**
+  - **Draft State:** Faculty can save partial or complete marks, return later, and modify entries without locking.
+  - **Submitted for Review State:** Requires complete marks for all candidates; marks are locked and forwarded to the Controller of Examinations (COE) for auditing.
+  - **Reopen Draft for Corrections:** Faculty can reopen submitted drafts to fix discrepancies before COE final lock.
+  - **Result Safety Rule:** Saving or submitting marks **never publishes results automatically**; candidate Statement of Grades remain unverified until formal Stage 5 COE moderation.
+
+---
+
+## 📡 Documented Stage 4 Faculty API Routes (`/api/faculty`)
+
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/faculty/profile` | Faculty | Retrieves authenticated faculty member profile details. |
+| `GET` | `/api/faculty/assignments` | Faculty | Returns active teaching allocations with enrolled counts, draft metrics, and status badges. |
+| `GET` | `/api/faculty/courses/:subjectId/students` | Faculty | Verifies allocation and returns eligible student roster with existing draft/submitted marks (`?academicYear`, `semester`, `division`). |
+| `POST` | `/api/faculty/marks/save-draft` | Faculty | Validates ranges and saves marks in `Draft` state; officially computes backend totals. |
+| `POST` | `/api/faculty/marks/submit` | Faculty | Validates complete roster, computes official totals, and transitions status to `Submitted` for COE review. |
+| `POST` | `/api/faculty/marks/reopen` | Faculty | Reopens submitted batch back to `Draft` state to allow evaluator corrections. |
+
+---
+
+## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, & 4)
+
+Run all test suites across authentication, database, administrative operations, and faculty marks evaluation:
 ```bash
-# Run all Stage 2 & Stage 3 tests
+# Run all Stage 2, Stage 3, and Stage 4 tests
 npm test
 ```
-The test suite validates 50 combined assertions:
-- [x] Stage 2: Server health, authentication, cookies, role security, student privacy, duplicate PRNs, logout (21 tests).
-- [x] Stage 3: Student CRUD, deactivation with history preservation, faculty management, credit validation, mark limits, semester match validation, faculty allocations, duplicate assignment prevention, batch CSV import error reports, and table pagination/search (29 tests).
+The test suite validates **93 combined assertions**:
+- [x] **Stage 2 (21 tests):** Server health, authentication, cookies, role security, student privacy, duplicate PRNs, logout.
+- [x] **Stage 3 (29 tests):** Student CRUD, deactivation with history preservation, faculty management, credit validation, mark limits, semester match validation, faculty allocations, duplicate assignment prevention, batch CSV import error reports, and table pagination/search.
+- [x] **Stage 4 (43 tests):** Faculty authentication, RBAC authorization, faculty profile, assigned subjects isolation, unassigned subject 403 prevention, eligible student loading, negative mark rejection, limit violation rejection, non-numeric rejection, duplicate PRN in batch rejection, draft saving, backend official total calculation, draft editing/correction, duplicate prevention for student/subject/attempt, incomplete submission rejection, batch submit for review, result non-publishing safety invariant, and draft reopening.
 
 ---
 
@@ -258,8 +306,12 @@ npm run dev
 - **Frontend:** [http://localhost:5173](http://localhost:5173)
 - **Backend API:** [http://localhost:5000](http://localhost:5000)
 
-### Run Tests
+### Run Automated Tests
 ```bash
 npm test
 ```
 
+### Build Frontend
+```bash
+npm run build
+```

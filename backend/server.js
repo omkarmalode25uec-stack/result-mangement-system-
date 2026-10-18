@@ -8,6 +8,7 @@ import { connectDB } from './config/db.js';
 import apiRouter from './routes/api.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
+import facultyRouter from './routes/faculty.js';
 import { seedDatabase } from './utils/seedData.js';
 
 // Resolve current directory for consistent .env resolution
@@ -48,13 +49,21 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Sanjivani College of Engineering - Result Management System (RMS) API',
     institution: "Sanjivani Rural Education Society's Sanjivani College of Engineering, Kopargaon",
-    stage: 'Stage 2: Authentication and Database',
+    stage: 'Stage 4: Faculty Marks Entry',
     endpoints: {
       auth: {
         login: 'POST /api/auth/login',
         logout: 'POST /api/auth/logout',
         me: 'GET /api/auth/me',
         register: 'POST /api/auth/register (restricted)',
+      },
+      faculty: {
+        profile: 'GET /api/faculty/profile (Faculty only)',
+        assignments: 'GET /api/faculty/assignments (Faculty only)',
+        students: 'GET /api/faculty/courses/:subjectId/students (Faculty only)',
+        saveDraft: 'POST /api/faculty/marks/save-draft (Faculty only)',
+        submit: 'POST /api/faculty/marks/submit (Faculty only)',
+        reopen: 'POST /api/faculty/marks/reopen (Faculty only)',
       },
       admin: {
         provisionStudent: 'POST /api/admin/provision/student (Admin only)',
@@ -83,6 +92,7 @@ app.get('/', (req, res) => {
 // Mount Routes
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/faculty', facultyRouter);
 app.use('/api', apiRouter);
 
 // 404 Handler
