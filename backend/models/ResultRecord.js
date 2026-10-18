@@ -161,8 +161,27 @@ const resultRecordSchema = new mongoose.Schema(
     },
     isPublished: {
       type: Boolean,
-      default: true,
+      default: false, // Default unpublished for Stage 5 calculation engine
       index: true,
+    },
+    gradingSchemeVersion: {
+      type: String,
+      default: 'Autonomous Scheme 2022 v1',
+      trim: true,
+    },
+    attempt: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    percentage: {
+      type: Number,
+      default: null,
+    },
+    rulesStatus: {
+      gradePointsConfirmed: [{ type: String }],
+      gradePointsProvisional: [{ type: String }],
+      isFormulaConfirmed: { type: Boolean, default: false },
     },
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -174,9 +193,9 @@ const resultRecordSchema = new mongoose.Schema(
   }
 );
 
-// Ensure a student has only one result record per academic year and semester
+// Ensure a student has only one result record per academic year, semester, and examination attempt
 resultRecordSchema.index(
-  { prn: 1, academicYear: 1, semester: 1 },
+  { prn: 1, academicYear: 1, semester: 1, attempt: 1 },
   { unique: true }
 );
 

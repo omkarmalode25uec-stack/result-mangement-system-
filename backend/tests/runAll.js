@@ -19,8 +19,9 @@ async function main() {
     await runScript('tests/runTests.js');
     await runScript('tests/stage3Tests.js');
     await runScript('tests/stage4Tests.js');
+    await runScript('tests/stage5Tests.js');
     console.log('\n====================================================');
-    console.log('ALL STAGE 2, STAGE 3, AND STAGE 4 TEST SUITES PASSED SUCCESSFULLY!');
+    console.log('ALL STAGE 2, 3, 4, AND 5 TEST SUITES PASSED SUCCESSFULLY!');
     console.log('====================================================\n');
     process.exit(0);
   } catch (err) {

@@ -9,6 +9,7 @@ import apiRouter from './routes/api.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
 import facultyRouter from './routes/faculty.js';
+import resultsRouter from './routes/results.js';
 import { seedDatabase } from './utils/seedData.js';
 
 // Resolve current directory for consistent .env resolution
@@ -49,13 +50,21 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Sanjivani College of Engineering - Result Management System (RMS) API',
     institution: "Sanjivani Rural Education Society's Sanjivani College of Engineering, Kopargaon",
-    stage: 'Stage 4: Faculty Marks Entry',
+    stage: 'Stage 5: Automatic Result Calculation Engine',
     endpoints: {
       auth: {
         login: 'POST /api/auth/login',
         logout: 'POST /api/auth/logout',
         me: 'GET /api/auth/me',
         register: 'POST /api/auth/register (restricted)',
+      },
+      resultsEngine: {
+        gradingSchemes: 'GET/POST /api/admin/grading-schemes (Admin only)',
+        activeScheme: 'GET /api/admin/grading-schemes/active (Admin only)',
+        calculateSemester: 'POST /api/admin/results/calculate-semester (Admin only)',
+        recalculateStudent: 'POST /api/admin/results/recalculate/:prn (Admin only)',
+        inspectResult: 'GET /api/admin/results/inspect/:prn (Admin only)',
+        summary: 'GET /api/admin/results/summary (Admin only)',
       },
       faculty: {
         profile: 'GET /api/faculty/profile (Faculty only)',
@@ -91,6 +100,7 @@ app.get('/', (req, res) => {
 
 // Mount Routes
 app.use('/api/auth', authRouter);
+app.use('/api/admin', resultsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/faculty', facultyRouter);
 app.use('/api', apiRouter);

@@ -7,6 +7,8 @@ import { Subject } from '../models/Subject.js';
 import { FacultyAssignment } from '../models/FacultyAssignment.js';
 import { ResultRecord } from '../models/ResultRecord.js';
 import { Department } from '../models/Department.js';
+import { GradingScheme } from '../models/GradingScheme.js';
+import { getDefaultGradingScheme } from '../services/calculationEngine.js';
 import { sampleMarksheets } from '../data/sampleData.js';
 
 /**
@@ -26,6 +28,13 @@ export const seedDatabase = async () => {
         { code: 'CIVIL', name: 'Civil Engineering', hodName: 'Dr. C. L. Jejurkar' },
       ]);
       console.log('[Seed] Default departments seeded.');
+    }
+
+    // Seed default grading scheme if missing
+    const schemeCount = await GradingScheme.countDocuments();
+    if (schemeCount === 0) {
+      await GradingScheme.create(getDefaultGradingScheme());
+      console.log('[Seed] Default Sanjivani Autonomous Scheme 2022 v1 seeded.');
     }
 
     // Check if admin already exists

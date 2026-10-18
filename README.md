@@ -283,17 +283,78 @@ npm test
 
 ---
 
-## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, & 4)
+## ⚙️ Stage 5: Automatic Result Calculation Engine
 
-Run all test suites across authentication, database, administrative operations, and faculty marks evaluation:
+### 1. Calculation & Grading Rules
+- **Total Marks Formula:**
+  $$\text{Total Marks} = \text{Internal Marks} + \text{Final Examination (ESE) Marks}$$
+  Calculates percentages where applicable and validates all maximum course limits.
+- **Grade Boundaries (Percentage out of 100):**
+  - `90% – 100%`: **O** (Outstanding)
+  - `80% – 89.99%`: **A+** (Excellent)
+  - `70% – 79.99%`: **A** (Very Good)
+  - `60% – 69.99%`: **B+** (Good)
+  - `50% – 59.99%`: **B** (Above Average)
+  - `40% – 49.99%`: **C** (Average / Passing Threshold)
+  - `Below 40%`: **F** (Fail)
+- **Confirmed vs. Provisional Status:**
+  - **Confirmed Grade Points (from Sanjivani College Statement of Grades):**
+    - `A+` = **9** grade points
+    - `A` = **8** grade points
+    - `B+` = **7** grade points
+  - **Provisional Grade Points (Subject to formal notification by Controller of Examinations):**
+    - `O` = **10**, `B` = **6**, `C` = **5**, `F` = **0**
+    - Clearly marked as provisional in the database, API responses, and portal UI.
+- **Admin-Configurable Grading Scheme ([`GradingScheme.js`](file:///c:/omkar/RMS/backend/models/GradingScheme.js)):**
+  - Contains grade boundaries, grade points, passing requirements (e.g., 40%), subject credit rules, SGPA calculation method, rounding conventions, applicable academic year, and scheme version.
+  - **Boundary Validation Engine:** Automatically rejects incomplete scales, gaps, overlapping boundaries, inverted ranges, and schemes without failing grades with `400 Bad Request`.
+- **Credits & SGPA Formula:**
+  - Course Credits ($C_i$)
+  - Earned Credits ($EC_i$: earned if passing, 0 if F)
+  - Grade Points ($GP_i$)
+  - Credit-Weighted Grade Points ($CP_i = C_i \times GP_i$)
+  - **SGPA Formula (Autonomous Credit-Weighted Average):**
+    $$\text{SGPA} = \frac{\sum (C_i \times GP_i)}{\sum C_i} = \frac{\text{Total Credit Points (GP)}}{\text{Total Registered Credits (CR)}}$$
+  - **Mathematical Verification:** Verified against the official Statement of Grades reference for candidate Aarav Shinde ($183 / 21 = 8.7142857 \to 8.71$).
+- **Integrity & Safety Rules:**
+  - All authoritative calculations performed on the backend.
+  - Stored `gradingSchemeVersion` on each result record (e.g., `Autonomous Scheme 2022 v1`).
+  - Recalculation after marks correction (`POST /api/admin/results/recalculate/:prn`).
+  - Detection of missing marks: Strictly refuses to generate corrupted partial results when candidates have unsubmitted course evaluations.
+  - Avoids duplicate results via compound unique index on `{ prn: 1, academicYear: 1, semester: 1, attempt: 1 }`.
+  - **Strict Non-Publishing Invariant:** All calculated results remain `isPublished: false` in draft verification state. **Results are NOT published automatically.**
+
+---
+
+## 📡 Documented Stage 5 API Routes
+
+### Grading Schemes & Calculation Engine (`/api/admin`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/admin/grading-schemes` | Admin | Lists all configured grading schemes with confirmed vs provisional status tags. |
+| `GET` | `/api/admin/grading-schemes/active` | Admin | Retrieves active default grading scheme. |
+| `POST` | `/api/admin/grading-schemes` | Admin | Creates new grading scheme with strict boundary overlap & gap validation. |
+| `PUT` | `/api/admin/grading-schemes/:id` | Admin | Updates grading scheme with boundary integrity validation. |
+| `PATCH` | `/api/admin/grading-schemes/:id/set-active` | Admin | Sets specific grading scheme as active default. |
+| `POST` | `/api/admin/results/calculate-semester` | Admin | Executes centralized calculation engine for cohort; saves unpublished results (`isPublished: false`). |
+| `POST` | `/api/admin/results/recalculate/:prn` | Admin | Recalculates individual student SGPA and credit points after marks corrections. |
+| `GET` | `/api/admin/results/inspect/:prn` | Admin | Inspects calculated semester result, course scores, and rules audit metadata. |
+| `GET` | `/api/admin/results/summary` | Admin | Returns cohort performance metrics (Distinction, First Class, SGPA average, Draft status). |
+
+---
+
+## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, 4, & 5)
+
+Run all test suites across authentication, database, administrative operations, faculty marks evaluation, and the automatic result calculation engine:
 ```bash
-# Run all Stage 2, Stage 3, and Stage 4 tests
+# Run all Stage 2, 3, 4, and 5 tests
 npm test
 ```
-The test suite validates **93 combined assertions**:
+The test suite validates **166 combined assertions**:
 - [x] **Stage 2 (21 tests):** Server health, authentication, cookies, role security, student privacy, duplicate PRNs, logout.
 - [x] **Stage 3 (29 tests):** Student CRUD, deactivation with history preservation, faculty management, credit validation, mark limits, semester match validation, faculty allocations, duplicate assignment prevention, batch CSV import error reports, and table pagination/search.
 - [x] **Stage 4 (43 tests):** Faculty authentication, RBAC authorization, faculty profile, assigned subjects isolation, unassigned subject 403 prevention, eligible student loading, negative mark rejection, limit violation rejection, non-numeric rejection, duplicate PRN in batch rejection, draft saving, backend official total calculation, draft editing/correction, duplicate prevention for student/subject/attempt, incomplete submission rejection, batch submit for review, result non-publishing safety invariant, and draft reopening.
+- [x] **Stage 5 (73 tests):** Total marks calculation (internal + ese), boundary marks (0 & 100), negative marks rejection, exceeding limits rejection, every grade boundary test (O, A+, A, B+, B, C, F), confirmed vs provisional status verification, scheme boundary validation (overlapping ranges rejected, gap detection, inverted ranges rejected, 0% coverage check), rounding conventions (Half-Up vs Truncate), credit points calculation, earned credits on pass/fail, full SGPA calculation with exact reference marksheet match ($183 / 21 = 8.71$), missing marks detection, API endpoints for schemes and calculation, cohort calculation, recalculation after marks corrections, and the strict unpublished result invariant.
 
 ---
 

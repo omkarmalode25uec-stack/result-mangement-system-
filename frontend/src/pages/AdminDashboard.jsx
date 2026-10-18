@@ -19,7 +19,10 @@ import {
   Power,
   RotateCcw,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  Calculator,
+  Award,
+  Play
 } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { COLLEGE_INFO } from '../data/fictionalData';
@@ -256,12 +259,125 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
     }
   };
 
+  // ==========================================================================
+  // TAB 6: GRADING SCHEMES & RESULT CALCULATION ENGINE (STAGE 5)
+  // ==========================================================================
+  const [activeScheme, setActiveScheme] = useState(null);
+  const [schemesList, setSchemesList] = useState([]);
+  const [schemesLoading, setSchemesLoading] = useState(false);
+
+  // Calculation Console State
+  const [calcYear, setCalcYear] = useState('2024-2025');
+  const [calcSemester, setCalcSemester] = useState(5);
+  const [calcDepartment, setCalcDepartment] = useState('Computer Engineering');
+  const [calcDivision, setCalcDivision] = useState('ALL');
+  const [calculationResults, setCalculationResults] = useState([]);
+  const [calculationSummary, setCalculationSummary] = useState(null);
+  const [missingMarksReport, setMissingMarksReport] = useState([]);
+  const [calculating, setCalculating] = useState(false);
+  const [recalculatingPrn, setRecalculatingPrn] = useState('');
+
+  const fetchGradingSchemes = async () => {
+    setSchemesLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/grading-schemes`, { credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        setSchemesList(data.data || []);
+        const active = data.data?.find((s) => s.isDefault) || data.data?.[0];
+        setActiveScheme(active);
+      }
+    } catch (err) {
+      console.warn('Could not fetch grading schemes:', err);
+    } finally {
+      setSchemesLoading(false);
+    }
+  };
+
+  const handleRunCalculation = async () => {
+    setCalculating(true);
+    setFeedback(null);
+    setMissingMarksReport([]);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/calculate-semester`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          academicYear: calcYear,
+          semester: calcSemester,
+          department: calcDepartment,
+          division: calcDivision,
+          schemeId: activeScheme?._id,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCalculationResults(data.results || []);
+        setCalculationSummary(data.summary);
+        setMissingMarksReport(data.missingMarksReport || []);
+        setFeedback({
+          type: 'success',
+          message: data.message || 'Semester results calculated successfully (Draft / Unpublished).',
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: data.message || 'Failed to calculate results.',
+        });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Calculation failed: ${err.message}` });
+    } finally {
+      setCalculating(false);
+    }
+  };
+
+  const handleRecalculate = async (prn) => {
+    setRecalculatingPrn(prn);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/recalculate/${prn}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          academicYear: calcYear,
+          semester: calcSemester,
+          schemeId: activeScheme?._id,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({
+          type: 'success',
+          message: data.message || `Result recalculated for PRN ${prn}.`,
+        });
+        setCalculationResults((prev) =>
+          prev.map((r) => (r.prn === prn ? { ...r, ...data.data } : r))
+        );
+      } else {
+        setFeedback({
+          type: 'error',
+          message: data.message || `Recalculation failed for PRN ${prn}.`,
+        });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Recalculation error: ${err.message}` });
+    } finally {
+      setRecalculatingPrn('');
+    }
+  };
+
   // Load initial tab data
   useEffect(() => {
     if (activeTab === 'students') fetchStudents();
     if (activeTab === 'faculty') fetchFaculty();
     if (activeTab === 'subjects') fetchSubjects();
     if (activeTab === 'structure') fetchStructure();
+    if (activeTab === 'results') fetchGradingSchemes();
     if (activeTab === 'assignments') {
       fetchAssignments();
       fetchFaculty();
@@ -712,6 +828,19 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
         >
           <Sparkles className="w-4 h-4 text-amber-700" />
           <span>Departments & Sessions</span>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('results'); setFeedback(null); }}
+          className={`flex items-center gap-2 py-2.5 px-4 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'results' ? 'bg-white text-blue-950 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Calculator className="w-4 h-4 text-blue-600" />
+          <span>Grading & Result Engine</span>
+          <span className="text-[10px] bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded font-mono font-bold">
+            Stage 5
+          </span>
         </button>
       </div>
 
@@ -1323,6 +1452,377 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 6: GRADING SCHEME & AUTOMATIC RESULT ENGINE (STAGE 5)             */}
+      {/* ===================================================================== */}
+      {activeTab === 'results' && (
+        <div className="space-y-6">
+          {/* Header & Stage 5 Overview Banner */}
+          <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-500/80 text-white px-2.5 py-0.5 rounded">
+                    Result Calculation Engine
+                  </span>
+                  <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> Stage 5 Active
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black">
+                  Centralized Autonomous Evaluation & SGPA Engine
+                </h2>
+                <p className="text-xs text-blue-200 mt-1 max-w-3xl">
+                  Authoritative backend calculation engine for course totals (Internal + Final Examination), verified Statement of Grades credit points, and semester SGPA.
+                </p>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-xl text-xs space-y-1 shrink-0">
+                <span className="text-blue-200 text-[10px] block font-semibold uppercase tracking-wider">Publication Status</span>
+                <span className="text-amber-300 font-bold block flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  Unpublished (Draft Verification Queue)
+                </span>
+                <span className="text-[10px] text-blue-200 block">Results will not be published until Stage 6</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 1. Active Grading Scheme & Rules Definition Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Award className="w-5 h-5 text-blue-700" />
+                  <h3 className="text-base font-bold text-slate-900">
+                    Configured Academic Grading Scheme
+                  </h3>
+                  <span className="text-xs font-mono font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded">
+                    {activeScheme?.schemeVersion || 'Autonomous Scheme 2022 v1'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Confirmed vs Provisional Rules Definition • Autonomous Scheme 2022
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
+                  Rounding: <strong>{activeScheme?.roundingConventions?.decimalPlaces || 2} Decimals (Half-Up)</strong>
+                </span>
+                <span className="text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
+                  Min Passing: <strong>{activeScheme?.passingRequirements?.minPassingPercentage || 40}%</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Confirmed vs Provisional Grade Boundaries Table */}
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-slate-100/80 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-4 text-center">Grade</th>
+                    <th className="py-2.5 px-4 text-center">Percentage Boundary</th>
+                    <th className="py-2.5 px-4 text-center">Grade Points</th>
+                    <th className="py-2.5 px-4">Verification Status</th>
+                    <th className="py-2.5 px-4">Classification</th>
+                    <th className="py-2.5 px-4 text-center">Passing Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-sans">
+                  {[
+                    { grade: 'O', range: '90% – 100%', gp: 10, confirmed: false, desc: 'Outstanding', isPassing: true },
+                    { grade: 'A+', range: '80% – 89%', gp: 9, confirmed: true, desc: 'Excellent', isPassing: true },
+                    { grade: 'A', range: '70% – 79%', gp: 8, confirmed: true, desc: 'Very Good', isPassing: true },
+                    { grade: 'B+', range: '60% – 69%', gp: 7, confirmed: true, desc: 'Good', isPassing: true },
+                    { grade: 'B', range: '50% – 59%', gp: 6, confirmed: false, desc: 'Above Average', isPassing: true },
+                    { grade: 'C', range: '40% – 49%', gp: 5, confirmed: false, desc: 'Average / Passing Threshold', isPassing: true },
+                    { grade: 'F', range: 'Below 40%', gp: 0, confirmed: false, desc: 'Fail', isPassing: false },
+                  ].map((rule) => (
+                    <tr key={rule.grade} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-2.5 px-4 text-center font-bold text-slate-900 font-mono text-sm">
+                        {rule.grade}
+                      </td>
+                      <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-700">
+                        {rule.range}
+                      </td>
+                      <td className="py-2.5 px-4 text-center font-mono font-extrabold text-blue-900">
+                        {rule.gp}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        {rule.confirmed ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            Confirmed (Official Marksheet)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                            <AlertCircle className="w-3 h-3 text-amber-600" />
+                            Provisional Scale
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-slate-600">
+                        {rule.desc}
+                      </td>
+                      <td className="py-2.5 px-4 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          rule.isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {rule.isPassing ? 'PASS' : 'FAIL'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mathematical Formula Note */}
+            <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4 text-xs space-y-1.5 text-blue-950">
+              <div className="font-bold flex items-center gap-1.5">
+                <Calculator className="w-4 h-4 text-blue-700" />
+                <span>Authoritative SGPA Formula (Autonomous Credit-Weighted Average):</span>
+              </div>
+              <p className="font-mono text-xs bg-white border border-blue-200 p-2 rounded-lg text-blue-900">
+                SGPA = ∑ (Credits_i × GradePoints_i) / ∑ (Credits_i) = Total Credit Points (GP) / Total Registered Credits (CR)
+              </p>
+              <p className="text-[11px] text-slate-600">
+                * Note: Evaluated on official 9-subject curriculum scheme. Formally marked provisional pending receipt of official Controller of Examinations notification.
+              </p>
+            </div>
+          </div>
+
+          {/* 2. Automatic Semester Result Calculation Console */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Play className="w-4 h-4 text-blue-700 fill-blue-700" />
+                  Cohort Calculation Console
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Execute backend evaluation for all enrolled candidates using submitted course marks.
+                </p>
+              </div>
+
+              {/* Action Button: Run Calculation Engine */}
+              <button
+                type="button"
+                onClick={handleRunCalculation}
+                disabled={calculating}
+                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer self-start sm:self-auto"
+              >
+                <Calculator className={`w-4 h-4 ${calculating ? 'animate-spin' : ''}`} />
+                {calculating ? 'Calculating Performance...' : 'Run Result Calculation Engine'}
+              </button>
+            </div>
+
+            {/* Filter Controls for Calculation */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Academic Year</label>
+                <select
+                  value={calcYear}
+                  onChange={(e) => setCalcYear(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                >
+                  <option value="2024-2025">2024-2025</option>
+                  <option value="2023-2024">2023-2024</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Semester</label>
+                <select
+                  value={calcSemester}
+                  onChange={(e) => setCalcSemester(Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <option key={s} value={s}>Semester {s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Department</label>
+                <select
+                  value={calcDepartment}
+                  onChange={(e) => setCalcDepartment(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                >
+                  <option value="Computer Engineering">Computer Engineering</option>
+                  <option value="Information Technology">Information Technology</option>
+                  <option value="Artificial Intelligence & Data Science">AI & Data Science</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Division</label>
+                <select
+                  value={calcDivision}
+                  onChange={(e) => setCalcDivision(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                >
+                  <option value="ALL">All Divisions</option>
+                  <option value="A">Division A</option>
+                  <option value="B">Division B</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Calculation Summary Metrics (if available) */}
+            {calculationSummary && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-medium text-slate-500">Cohort Candidates</span>
+                  <p className="text-lg font-bold text-slate-900">{calculationSummary.totalCohortSize}</p>
+                </div>
+                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                  <span className="text-[11px] font-medium text-emerald-700">Calculated Results</span>
+                  <p className="text-lg font-bold text-emerald-900">{calculationSummary.calculatedCount}</p>
+                </div>
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                  <span className="text-[11px] font-medium text-amber-700">Skipped (Missing Marks)</span>
+                  <p className="text-lg font-bold text-amber-900">{calculationSummary.skippedCount}</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                  <span className="text-[11px] font-medium text-blue-700">Publication State</span>
+                  <p className="text-xs font-bold text-blue-900 mt-1">Unpublished (Draft)</p>
+                </div>
+              </div>
+            )}
+
+            {/* Missing Marks Alert (if any students were skipped) */}
+            {missingMarksReport.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-900">
+                <div className="flex items-center gap-2 font-bold text-amber-800">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Missing Marks Detected ({missingMarksReport.length} candidates skipped):</span>
+                </div>
+                <p className="text-[11px] text-amber-800">
+                  The calculation engine strictly refuses to generate corrupted partial results. The following candidates have courses without submitted faculty marks:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pt-1">
+                  {missingMarksReport.map((m) => (
+                    <div key={m.prn} className="bg-white p-2 rounded border border-amber-200 text-[11px]">
+                      <strong>{m.prn}</strong> - {m.name}
+                      <span className="text-amber-700 block text-[10px]">
+                        Missing {m.missingCount} course(s): {m.missingCourses.map(c => c.subjectCode).join(', ')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Calculation Results Table */}
+            {calculationResults.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                  <span>Authoritative Calculated Roster ({calculationResults.length} records)</span>
+                  <span className="text-blue-700 text-[11px]">Scheme: {activeScheme?.schemeVersion || 'Autonomous Scheme 2022 v1'}</span>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100/90 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4">PRN</th>
+                        <th className="py-3 px-4">Student Name</th>
+                        <th className="py-3 px-3 text-center">Total CR</th>
+                        <th className="py-3 px-3 text-center">Total EC</th>
+                        <th className="py-3 px-3 text-center">Total GP</th>
+                        <th className="py-3 px-3 text-center">Percentage</th>
+                        <th className="py-3 px-3 text-center">Calculated SGPA</th>
+                        <th className="py-3 px-4 text-center">Result Status</th>
+                        <th className="py-3 px-3 text-center">Publication</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {calculationResults.map((r) => (
+                        <tr key={r.prn} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-blue-950">
+                            {r.prn}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">
+                            {r.studentName}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-700">
+                            {r.totalCR}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-emerald-800">
+                            {r.totalEC}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-extrabold text-blue-900">
+                            {r.totalGP}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-slate-700">
+                            {r.percentage ? `${r.percentage}%` : '-'}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="font-mono font-black text-sm px-2 py-0.5 rounded bg-blue-50 text-blue-950 border border-blue-200">
+                              {r.sgpa?.toFixed(2)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              r.resultStatus?.includes('DISTINCTION')
+                                ? 'bg-purple-100 text-purple-900'
+                                : r.resultStatus?.includes('FIRST CLASS')
+                                ? 'bg-emerald-100 text-emerald-900'
+                                : r.resultStatus?.includes('FAIL')
+                                ? 'bg-rose-100 text-rose-900'
+                                : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              {r.resultStatus}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                              Unpublished
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleRecalculate(r.prn)}
+                                disabled={recalculatingPrn === r.prn}
+                                className="text-blue-700 hover:text-blue-900 font-bold text-[11px] cursor-pointer"
+                                title="Recalculate after marks corrections"
+                              >
+                                {recalculatingPrn === r.prn ? 'Recalculating...' : 'Recalculate'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPrn(r.prn);
+                                  setCurrentView('marksheet');
+                                }}
+                                className="text-slate-600 hover:text-slate-900 text-[11px] font-medium cursor-pointer"
+                              >
+                                Preview →
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs">
+                Select session parameters and click <strong>"Run Result Calculation Engine"</strong> to compute SGPA and credit distributions.
+              </div>
+            )}
           </div>
         </div>
       )}
