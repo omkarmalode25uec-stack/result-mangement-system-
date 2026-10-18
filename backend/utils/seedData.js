@@ -6,6 +6,7 @@ import { AcademicSession } from '../models/AcademicSession.js';
 import { Subject } from '../models/Subject.js';
 import { FacultyAssignment } from '../models/FacultyAssignment.js';
 import { ResultRecord } from '../models/ResultRecord.js';
+import { Department } from '../models/Department.js';
 import { sampleMarksheets } from '../data/sampleData.js';
 
 /**
@@ -14,6 +15,19 @@ import { sampleMarksheets } from '../data/sampleData.js';
  */
 export const seedDatabase = async () => {
   try {
+    // Seed departments if missing
+    const deptCount = await Department.countDocuments();
+    if (deptCount === 0) {
+      await Department.insertMany([
+        { code: 'COMP', name: 'Computer Engineering', hodName: 'Dr. M. A. Jawale' },
+        { code: 'IT', name: 'Information Technology', hodName: 'Dr. D. B. Kshirsagar' },
+        { code: 'AIDS', name: 'Artificial Intelligence & Data Science', hodName: 'Dr. P. N. Kalavadekar' },
+        { code: 'MECH', name: 'Mechanical Engineering', hodName: 'Dr. A. G. Thakur' },
+        { code: 'CIVIL', name: 'Civil Engineering', hodName: 'Dr. C. L. Jejurkar' },
+      ]);
+      console.log('[Seed] Default departments seeded.');
+    }
+
     // Check if admin already exists
     const adminExists = await User.findOne({ username: 'admin' });
     if (adminExists) {

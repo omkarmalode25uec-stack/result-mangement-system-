@@ -44,15 +44,23 @@ const subjectSchema = new mongoose.Schema(
     },
     maxInternalMarks: {
       type: Number,
+      required: [true, 'Internal maximum marks is required'],
       default: 30,
+      min: [0, 'Internal marks cannot be negative'],
+      max: [100, 'Internal marks cannot exceed 100'],
     },
     maxEseMarks: {
       type: Number,
+      required: [true, 'Final examination maximum marks is required'],
       default: 70,
+      min: [0, 'Final examination marks cannot be negative'],
+      max: [100, 'Final examination marks cannot exceed 100'],
     },
     totalMaxMarks: {
       type: Number,
       default: 100,
+      min: 1,
+      max: 200,
     },
     syllabusRevision: {
       type: String,

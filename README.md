@@ -187,43 +187,79 @@ To run tests:
 ```bash
 # Ensure backend server is running in another terminal
 npm test
+## 📋 Stage 3: Admin Dashboard & Academic Management
+
+### 1. Features Implemented
+- **Student Record Management:** Create, view, search, filter, paginate, edit, and deactivate student profiles.
+- **Unique PRN Integrity:** Database unique indexes and controller validations guarantee duplicate PRNs are rejected with `409 Conflict`.
+- **Historical Records Preserved:** When a student is deactivated (`status: 'Inactive'`), all historical academic marks, Statement of Grades, and audit logs are safely preserved.
+- **Faculty Account Management:** Create and manage faculty profiles with unique Employee IDs, department assignments, and active/inactive toggle switches.
+- **Academic Structure:** Manage departments (code, name, HOD), programmes, branches, and academic sessions with active session indicators.
+- **Course Catalog (Subjects):** Create subjects with course code, name, type (`TH`, `PR`, `OR`, `TW`, `PE`, `OE`), credits (validated 1-10), semester (validated 1-8), internal maximum marks (validated 0-100), and final exam (ESE) maximum marks (validated 0-100).
+- **Faculty-Subject Allocations:** Assign faculty members to courses for specific academic terms and divisions with semester match validation and duplicate allocation prevention.
+- **Batch CSV Import:** Bulk import student records with header validation, duplicate checks (both within the CSV and against MongoDB), and an interactive row-by-row Error Report.
+- **Search, Filter & Pagination:** Responsive, searchable, filterable data tables with page navigation across students, faculty, and subjects.
+
+---
+
+## 📡 Documented Stage 3 API Routes
+
+### Admin Student Management (`/api/admin/students`)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/admin/students` | Paginated, searchable student directory (`?page`, `limit`, `search`, `branch`, `semester`, `status`). |
+| `GET` | `/api/admin/students/:id` | Full profile details including linked user and past result records. |
+| `POST` | `/api/admin/students` | Creates unique PRN, hashes password, creates user + profile. |
+| `PUT` | `/api/admin/students/:id` | Updates student demographic and academic fields. |
+| `PATCH` | `/api/admin/students/:id/status` | Deactivates or activates student record while preserving historical results. |
+| `POST` | `/api/admin/students/import-csv` | Batch CSV student import with row-by-row validation & error reporting. |
+
+### Admin Faculty Management (`/api/admin/faculty`)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/admin/faculty` | Paginated, searchable faculty directory (`?page`, `limit`, `search`, `department`). |
+| `POST` | `/api/admin/faculty` | Creates faculty account with unique Employee ID and email. |
+| `PUT` | `/api/admin/faculty/:id` | Updates faculty designation, department, and contact info. |
+| `PATCH` | `/api/admin/faculty/:id/status` | Toggles faculty active/inactive status. |
+
+### Academic Structure & Subjects (`/api/admin`)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` / `POST` | `/api/admin/departments` | Lists and creates academic departments (code, name, HOD). |
+| `GET` / `POST` | `/api/admin/sessions` | Lists and creates academic sessions/terms (`academicYear`, `semester`). |
+| `GET` | `/api/admin/subjects` | Paginated course catalog (`?page`, `limit`, `search`, `semester`, `type`). |
+| `POST` | `/api/admin/subjects` | Creates course with strict credit (1-10) and mark limit (0-100) validation. |
+| `PUT` / `DELETE` | `/api/admin/subjects/:id` | Modifies or deletes courses (prevents deletion if allocations exist). |
+| `GET` / `POST` | `/api/admin/assignments` | Lists and creates faculty-to-subject course allocations. |
+| `DELETE` | `/api/admin/assignments/:id` | Revokes faculty course allocations. |
+| `GET` | `/api/admin/metrics` | Returns total counts for students, faculty, subjects, sessions, and users. |
+
+---
+
+## 🧪 Automated Test Suite (Stages 2 & 3)
+
+Run all test suites across authentication, database, security, and administrative features:
+```bash
+# Run all Stage 2 & Stage 3 tests
+npm test
 ```
-The test suite validates:
-- [x] Server health status
-- [x] Successful Student, Faculty, and Admin logins
-- [x] Cookie generation and password hash omission
-- [x] Failed logins on incorrect password and non-existent users
-- [x] Public self-registration rejection (403 Forbidden)
-- [x] Unauthenticated request rejection (401 Unauthorized)
-- [x] Student accessing own Statement of Grades (200 OK)
-- [x] **Student attempting to access another student's record (403 Forbidden)**
-- [x] **Faculty attempting to access Admin endpoints (403 Forbidden)**
-- [x] Admin successfully provisioning a new candidate account (201 Created)
-- [x] **Duplicate PRN prevention (409 Conflict)**
-- [x] Clean logout and cookie revocation
+The test suite validates 50 combined assertions:
+- [x] Stage 2: Server health, authentication, cookies, role security, student privacy, duplicate PRNs, logout (21 tests).
+- [x] Stage 3: Student CRUD, deactivation with history preservation, faculty management, credit validation, mark limits, semester match validation, faculty allocations, duplicate assignment prevention, batch CSV import error reports, and table pagination/search (29 tests).
 
 ---
 
 ## 🚀 Startup Commands
 
-### Run Full-Stack Simultaneously (Recommended)
-From the root `RMS` folder:
+### Run Full-Stack Concurrently
 ```bash
 npm run dev
 ```
 - **Frontend:** [http://localhost:5173](http://localhost:5173)
 - **Backend API:** [http://localhost:5000](http://localhost:5000)
 
-### Or Run Individually:
-
-**Backend:**
+### Run Tests
 ```bash
-cd backend
-npm run dev
+npm test
 ```
 
-**Frontend:**
-```bash
-cd frontend
-npm run dev
-```
