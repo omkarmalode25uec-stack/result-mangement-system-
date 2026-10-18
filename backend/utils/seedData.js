@@ -268,7 +268,10 @@ export const seedDatabase = async () => {
         sgpa: marksheet1.sgpa,
         cgpa: marksheet1.cgpa,
         resultStatus: marksheet1.resultStatus,
+        attempt: 1,
         isPublished: true,
+        reviewStatus: 'Published',
+        publishedAt: new Date('2025-01-12'),
         verifiedBy: adminUser._id,
       });
     }
@@ -295,7 +298,10 @@ export const seedDatabase = async () => {
         sgpa: marksheet2.sgpa,
         cgpa: marksheet2.cgpa,
         resultStatus: marksheet2.resultStatus,
+        attempt: 1,
         isPublished: true,
+        reviewStatus: 'Published',
+        publishedAt: new Date('2025-01-12'),
         verifiedBy: adminUser._id,
       });
     }

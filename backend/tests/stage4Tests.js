@@ -47,6 +47,25 @@ async function runStage4Tests() {
   console.log('RUNNING STAGE 4 FACULTY MARKS ENTRY WORKFLOW TESTS');
   console.log('====================================================\n');
 
+  // 0. Reset any publication or approval locks so faculty draft workflow tests can run cleanly
+  const resetAdminLogin = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier: 'admin@sanjivani.edu.in', password: 'Admin@123' }),
+  });
+  if (resetAdminLogin.ok && resetAdminLogin.data?.token) {
+    await request('/admin/results/batches/unpublish', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resetAdminLogin.data.token}` },
+      body: JSON.stringify({
+        academicYear: '2024-2025',
+        semester: 5,
+        branch: 'Computer Engineering',
+        targetStatus: 'Draft',
+        reason: 'Reset locks for Stage 4 faculty workflow tests',
+      }),
+    });
+  }
+
   // 1. Authenticate as Faculty (Prof. R. M. Kulkarni)
   console.log('1. Faculty Authentication');
   const facultyLogin = await request('/auth/login', {
@@ -358,7 +377,10 @@ async function runStage4Tests() {
   const studentResultRes = await request('/marksheet/22UCO01042', {
     headers: studentHeaders,
   });
-  assert('Student marksheet query succeeded (200)', studentResultRes.status === 200);
+  assert(
+    'Saving marks does not auto-publish results (remains unpublished/private)',
+    studentResultRes.status === 403 || (studentResultRes.status === 200 && studentResultRes.data?.data?.isPublished === false)
+  );
 
   // 14. Reopen Submitted Draft for Editing & Corrections
   console.log('\n14. Reopen Draft for Corrections');

@@ -179,7 +179,9 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
   const maxInternal = courseData?.subject?.maxInternalMarks ?? 30;
   const maxEse = courseData?.subject?.maxEseMarks ?? 70;
   const totalMax = courseData?.subject?.totalMaxMarks ?? (maxInternal + maxEse);
-  const isCourseLocked = courseData?.isLocked || courseData?.stats?.batchStatus === 'Submitted';
+  const isCourseLocked = courseData?.isLocked ?? false;
+  const batchStatus = courseData?.stats?.batchStatus || (isCourseLocked ? 'Submitted' : 'Draft');
+  const returnReason = courseData?.returnReason || courseData?.stats?.returnReason;
 
   // Compute validation state for a student row
   const getRowValidation = (student) => {
@@ -219,6 +221,30 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
         status: 'Unsaved',
         label: 'Unsaved Changes',
         color: 'text-amber-800 bg-amber-50 border border-amber-200',
+      };
+    }
+
+    if (marks.status === 'Published') {
+      return {
+        status: 'Published',
+        label: 'Published',
+        color: 'text-blue-800 bg-blue-50 border border-blue-200',
+      };
+    }
+
+    if (marks.status === 'Approved') {
+      return {
+        status: 'Approved',
+        label: 'Approved by COE',
+        color: 'text-emerald-800 bg-emerald-50 border border-emerald-200',
+      };
+    }
+
+    if (marks.status === 'Returned') {
+      return {
+        status: 'Returned',
+        label: 'Returned for Correction',
+        color: 'text-rose-800 bg-rose-50 border border-rose-200',
       };
     }
 
@@ -679,19 +705,31 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
                           </span>
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                              isSubmitted
+                              assignment.statusBadge === 'Published'
+                                ? 'bg-blue-100 text-blue-800'
+                                : assignment.statusBadge === 'Approved'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : assignment.statusBadge === 'Returned'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                : assignment.statusBadge === 'Submitted'
                                 ? 'bg-indigo-100 text-indigo-800'
                                 : assignment.statusBadge === 'Draft'
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {isSubmitted ? (
+                            {assignment.statusBadge === 'Published' ? (
+                              <Award className="w-2.5 h-2.5" />
+                            ) : assignment.statusBadge === 'Approved' ? (
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            ) : assignment.statusBadge === 'Returned' ? (
+                              <AlertTriangle className="w-2.5 h-2.5 text-rose-600" />
+                            ) : assignment.statusBadge === 'Submitted' ? (
                               <Lock className="w-2.5 h-2.5" />
                             ) : (
                               <Clock className="w-2.5 h-2.5" />
                             )}
-                            {assignment.evaluationStatus || 'Active'}
+                            {assignment.statusBadge || 'Active'}
                           </span>
                         </div>
                         <h3 className="text-sm font-bold text-slate-900 line-clamp-1">
@@ -738,7 +776,19 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
                         Division {activeAssignment.division || 'A'}
                       </span>
-                      {isCourseLocked ? (
+                      {batchStatus === 'Published' ? (
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 flex items-center gap-1">
+                          <Award className="w-3 h-3" /> Published (Live)
+                        </span>
+                      ) : batchStatus === 'Approved' ? (
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Approved by COE (Locked)
+                        </span>
+                      ) : batchStatus === 'Returned' ? (
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-rose-600" /> Returned for Correction
+                        </span>
+                      ) : isCourseLocked ? (
                         <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 flex items-center gap-1">
                           <Lock className="w-3 h-3" /> Submitted for Review (Locked)
                         </span>
@@ -768,7 +818,12 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
                       </button>
                     )}
 
-                    {isCourseLocked ? (
+                    {batchStatus === 'Approved' || batchStatus === 'Published' ? (
+                      <div className="px-3 py-1.5 bg-slate-100 border border-slate-300 text-slate-600 text-xs font-bold rounded-lg flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-slate-500" />
+                        Evaluation Finalized by Examination Cell
+                      </div>
+                    ) : isCourseLocked ? (
                       <button
                         type="button"
                         onClick={handleReopenDraft}
@@ -797,7 +852,11 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
                           className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
                         >
                           <Send className="w-3.5 h-3.5 text-blue-200" />
-                          {isSubmitting ? 'Submitting...' : 'Submit for Review'}
+                          {isSubmitting
+                            ? 'Submitting...'
+                            : batchStatus === 'Returned'
+                            ? 'Submit Corrected Marks for Review'
+                            : 'Submit for Review'}
                         </button>
                       </>
                     )}
@@ -824,6 +883,51 @@ export default function FacultyDashboard({ setCurrentView, setSelectedPrn }) {
                   </div>
                 </div>
               </div>
+
+              {/* Stage 6: Returned for Correction Banner */}
+              {batchStatus === 'Returned' && (
+                <div className="mx-6 p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex items-start gap-3 shadow-xs">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-2">
+                      <span>Evaluation Returned for Correction by Examination Cell</span>
+                      <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">Action Required</span>
+                    </div>
+                    <p className="text-xs text-amber-900 font-medium">
+                      Reviewer Reason: <span className="font-bold underline">{returnReason || 'Marks require revision before final approval.'}</span>
+                    </p>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Inputs have been unlocked. Make the required corrections in the roster below and click <strong>"Submit Corrected Marks for Review"</strong> to forward the batch back to the Controller of Examinations.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Stage 6: Approved Banner */}
+              {batchStatus === 'Approved' && (
+                <div className="mx-6 p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div className="text-xs">
+                    <span className="font-bold text-emerald-900">Course Evaluation Approved by Examination Cell</span>
+                    <p className="text-[11px] text-emerald-800 mt-0.5">
+                      All student marks for this course have been verified and approved. Marks are locked in preparation for final semester result publication.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Stage 6: Published Banner */}
+              {batchStatus === 'Published' && (
+                <div className="mx-6 p-4 rounded-xl bg-blue-50 border border-blue-300 text-blue-950 flex items-center gap-3">
+                  <Award className="w-5 h-5 text-blue-600 shrink-0" />
+                  <div className="text-xs">
+                    <span className="font-bold text-blue-900">Official Results Published</span>
+                    <p className="text-[11px] text-blue-800 mt-0.5">
+                      Statement of Grades is live and accessible to enrolled candidates. Any further changes require post-publication COE authorization.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Notice Banner: Saving marks does not auto-publish */}
               <div className="mx-6 p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-start gap-2.5 text-xs text-blue-900">

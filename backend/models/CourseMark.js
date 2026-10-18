@@ -101,11 +101,32 @@ const courseMarkSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ['Draft', 'Submitted', 'Approved', 'Rejected'],
+        values: ['Draft', 'Submitted', 'Approved', 'Returned', 'Published', 'Rejected'],
         message: '{VALUE} is not a valid evaluation status',
       },
       default: 'Draft',
       index: true,
+    },
+    returnReason: {
+      type: String,
+      trim: true,
+    },
+    returnedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    returnedAt: {
+      type: Date,
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    approvedAt: {
+      type: Date,
+    },
+    publishedAt: {
+      type: Date,
     },
     attempt: {
       type: Number,

@@ -168,7 +168,7 @@ router.get(
 );
 
 // 8. Statement of Grades / Marksheet preview by PRN
-// Protected & Enforced: Students can ONLY access their own PRN
+// Protected & Enforced: Students can ONLY access their own PUBLISHED results
 router.get(
   '/marksheet/:prn',
   authenticate,
@@ -176,16 +176,32 @@ router.get(
   async (req, res) => {
     try {
       const prn = req.params.prn.toUpperCase();
-      let marksheet = await ResultRecord.findOne({ prn }).lean();
+      let marksheet = await ResultRecord.findOne({ prn }).sort({ createdAt: -1 }).lean();
 
-      if (!marksheet) {
+      // Stage 6 Publication Rules:
+      // 1. Draft results must never be visible to students.
+      // 2. Submitted results must remain private.
+      // 3. Approved results remain private until published.
+      // 5. Students can access only their own published results.
+      if (req.user.role === 'Student') {
+        if (marksheet && !marksheet.isPublished) {
+          return res.status(403).json({
+            success: false,
+            message: `Statement of Grades for PRN ${prn} is currently under moderation/review and has not been published yet.`,
+            reviewStatus: marksheet.reviewStatus || 'Draft',
+            isPublished: false,
+          });
+        }
+      }
+
+      if (!marksheet && req.user.role !== 'Student') {
         marksheet = sampleMarksheets[prn];
       }
 
-      if (!marksheet) {
+      if (!marksheet || (req.user.role === 'Student' && !marksheet.isPublished)) {
         return res.status(404).json({
           success: false,
-          message: `No Statement of Grades found for PRN: ${prn}.`,
+          message: `No published Statement of Grades found for PRN: ${prn}.`,
         });
       }
 
@@ -211,16 +227,23 @@ router.get('/marksheet-me', authenticate, async (req, res) => {
     }
 
     const prn = req.user.prn.toUpperCase();
-    let marksheet = await ResultRecord.findOne({ prn }).lean();
+    let marksheet = await ResultRecord.findOne({ prn }).sort({ createdAt: -1 }).lean();
 
-    if (!marksheet) {
-      marksheet = sampleMarksheets[prn];
+    // Stage 6 Publication Rules:
+    // Block student from accessing unpublished, draft, submitted, or approved results
+    if (marksheet && !marksheet.isPublished) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your examination results are currently under verification and have not been published yet.',
+        reviewStatus: marksheet.reviewStatus || 'Draft',
+        isPublished: false,
+      });
     }
 
-    if (!marksheet) {
+    if (!marksheet || !marksheet.isPublished) {
       return res.status(404).json({
         success: false,
-        message: `No Statement of Grades found for your PRN (${prn}).`,
+        message: `No published Statement of Grades found for your PRN (${prn}).`,
       });
     }
 

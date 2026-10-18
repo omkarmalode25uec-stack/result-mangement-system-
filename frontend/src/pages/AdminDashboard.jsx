@@ -22,7 +22,16 @@ import {
   HelpCircle,
   Calculator,
   Award,
-  Play
+  Play,
+  Lock,
+  Unlock,
+  AlertTriangle,
+  History,
+  Send,
+  Globe,
+  Check,
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { COLLEGE_INFO } from '../data/fictionalData';
@@ -371,13 +380,264 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
     }
   };
 
+  // ==========================================================================
+  // STAGE 6: RESULT REVIEW, MODERATION & PUBLICATION (COE DESK)
+  // ==========================================================================
+  const [resultsSubTab, setResultsSubTab] = useState('review'); // 'review' | 'calculation' | 'audit'
+  const [batchesData, setBatchesData] = useState({ courseBatches: [], semesterBatches: [] });
+  const [batchesLoading, setBatchesLoading] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPrnFilter, setAuditPrnFilter] = useState('');
+
+  // Modals for return, correction, and unpublish
+  const [returnModal, setReturnModal] = useState(null); // { batchType, subjectId, academicYear, semester, branch, title }
+  const [returnReason, setReturnReason] = useState('');
+  const [actionInProgress, setActionInProgress] = useState(false);
+
+  const [unpublishModal, setUnpublishModal] = useState(null); // { academicYear, semester, branch, count }
+  const [unpublishReason, setUnpublishReason] = useState('');
+
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [correctionForm, setCorrectionForm] = useState({
+    prn: '',
+    courseCode: '',
+    academicYear: '2024-2025',
+    semester: 5,
+    internalMarks: '',
+    eseMarks: '',
+    reason: '',
+  });
+
+  const fetchBatches = async () => {
+    setBatchesLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/batches?academicYear=${calcYear}&semester=${calcSemester}`, {
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBatchesData({
+          courseBatches: data.courseBatches || [],
+          semesterBatches: data.semesterBatches || [],
+        });
+      }
+    } catch (err) {
+      console.warn('Could not fetch batches:', err);
+    } finally {
+      setBatchesLoading(false);
+    }
+  };
+
+  const fetchAuditLogs = async (prn = '') => {
+    setAuditLoading(true);
+    try {
+      const url = prn
+        ? `${API_BASE}/admin/results/audit-trail?prn=${encodeURIComponent(prn)}`
+        : `${API_BASE}/admin/results/audit-trail?academicYear=${calcYear}&semester=${calcSemester}`;
+      const res = await fetch(url, { credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        setAuditLogs(data.data || []);
+      }
+    } catch (err) {
+      console.warn('Could not fetch audit trail:', err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const handleApproveBatch = async ({ batchType, subjectId, branch }) => {
+    setActionInProgress(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/batches/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          batchType,
+          subjectId,
+          branch,
+          academicYear: calcYear,
+          semester: calcSemester,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({ type: 'success', message: data.message });
+        fetchBatches();
+        fetchAuditLogs();
+      } else {
+        setFeedback({ type: 'error', message: data.message || 'Batch approval failed.' });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Approval request failed: ${err.message}` });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const handleConfirmReturn = async () => {
+    if (!returnModal || !returnReason.trim()) {
+      setFeedback({ type: 'error', message: 'A specific return reason is strictly required.' });
+      return;
+    }
+    setActionInProgress(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/batches/return`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          batchType: returnModal.batchType,
+          subjectId: returnModal.subjectId,
+          branch: returnModal.branch,
+          academicYear: calcYear,
+          semester: calcSemester,
+          reason: returnReason.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({ type: 'success', message: data.message });
+        setReturnModal(null);
+        setReturnReason('');
+        fetchBatches();
+        fetchAuditLogs();
+      } else {
+        setFeedback({ type: 'error', message: data.message || 'Return failed.' });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Return request failed: ${err.message}` });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const handlePublishBatch = async ({ branch }) => {
+    if (!window.confirm('Are you sure you want to officially PUBLISH results for this cohort? Students will immediately be able to view their Statement of Grades.')) {
+      return;
+    }
+    setActionInProgress(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/batches/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          academicYear: calcYear,
+          semester: calcSemester,
+          branch,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({ type: 'success', message: data.message });
+        fetchBatches();
+        fetchAuditLogs();
+      } else {
+        setFeedback({ type: 'error', message: data.message || 'Publishing failed.' });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Publishing error: ${err.message}` });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const handleConfirmUnpublish = async () => {
+    if (!unpublishModal || !unpublishReason.trim()) {
+      setFeedback({ type: 'error', message: 'A justification reason is required to unpublish.' });
+      return;
+    }
+    setActionInProgress(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/batches/unpublish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          academicYear: calcYear,
+          semester: calcSemester,
+          branch: unpublishModal.branch,
+          reason: unpublishReason.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({ type: 'success', message: data.message });
+        setUnpublishModal(null);
+        setUnpublishReason('');
+        fetchBatches();
+        fetchAuditLogs();
+      } else {
+        setFeedback({ type: 'error', message: data.message || 'Unpublishing failed.' });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Unpublish error: ${err.message}` });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const handleExecuteCorrection = async (e) => {
+    e.preventDefault();
+    if (!correctionForm.reason.trim()) {
+      setFeedback({ type: 'error', message: 'A justification reason is required for post-publication corrections.' });
+      return;
+    }
+    setActionInProgress(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/results/correct-published`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(correctionForm),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedback({
+          type: 'success',
+          message: `${data.message} SGPA updated from ${data.previousSGPA?.toFixed(2)} to ${data.newSGPA?.toFixed(2)}.`,
+        });
+        setShowCorrectionModal(false);
+        setCorrectionForm({
+          prn: '',
+          courseCode: '',
+          academicYear: calcYear,
+          semester: calcSemester,
+          internalMarks: '',
+          eseMarks: '',
+          reason: '',
+        });
+        fetchBatches();
+        fetchAuditLogs();
+      } else {
+        setFeedback({ type: 'error', message: data.message || 'Correction failed.' });
+      }
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Correction error: ${err.message}` });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
   // Load initial tab data
   useEffect(() => {
     if (activeTab === 'students') fetchStudents();
     if (activeTab === 'faculty') fetchFaculty();
     if (activeTab === 'subjects') fetchSubjects();
     if (activeTab === 'structure') fetchStructure();
-    if (activeTab === 'results') fetchGradingSchemes();
+    if (activeTab === 'results') {
+      fetchGradingSchemes();
+      fetchBatches();
+      fetchAuditLogs();
+    }
     if (activeTab === 'assignments') {
       fetchAssignments();
       fetchFaculty();
@@ -397,7 +657,9 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
     subjectSearch,
     subjectSemester,
     subjectDept,
-    subjectType
+    subjectType,
+    calcYear,
+    calcSemester
   ]);
 
   // ==========================================================================
@@ -1457,373 +1719,937 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
       )}
 
       {/* ===================================================================== */}
-      {/* TAB 6: GRADING SCHEME & AUTOMATIC RESULT ENGINE (STAGE 5)             */}
+      {/* TAB 6: GRADING SCHEME, CALCULATION & PUBLICATION ENGINE (STAGE 6)     */}
       {/* ===================================================================== */}
       {activeTab === 'results' && (
         <div className="space-y-6">
-          {/* Header & Stage 5 Overview Banner */}
+          {/* Header & Stage 6 Overview Banner */}
           <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-6 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-500/80 text-white px-2.5 py-0.5 rounded">
-                    Result Calculation Engine
+                    Autonomous Examination Cell
                   </span>
-                  <span className="text-[11px] font-bold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Stage 5 Active
+                  <span className="text-[11px] font-bold bg-emerald-400 text-slate-950 px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                    <CheckCircle2 className="w-3 h-3 text-slate-950" /> Stage 6 Active: Moderation & Publication
                   </span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black">
-                  Centralized Autonomous Evaluation & SGPA Engine
+                  Result Moderation, Review & Publication Console
                 </h2>
                 <p className="text-xs text-blue-200 mt-1 max-w-3xl">
-                  Authoritative backend calculation engine for course totals (Internal + Final Examination), verified Statement of Grades credit points, and semester SGPA.
+                  Enforces strict examination workflow: <strong>Draft → Submitted for review → Approved → Published</strong>. Unapproved marks remain strictly confidential; post-publication changes require mandatory justification and create immutable audit logs.
                 </p>
               </div>
 
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-xl text-xs space-y-1 shrink-0">
-                <span className="text-blue-200 text-[10px] block font-semibold uppercase tracking-wider">Publication Status</span>
-                <span className="text-amber-300 font-bold block flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                  Unpublished (Draft Verification Queue)
+              <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-xl text-xs space-y-1.5 shrink-0">
+                <span className="text-blue-200 text-[10px] block font-semibold uppercase tracking-wider">Publication Governance</span>
+                <span className="text-emerald-300 font-bold block flex items-center gap-1.5 text-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  COE Authorization Required
                 </span>
-                <span className="text-[10px] text-blue-200 block">Results will not be published until Stage 6</span>
+                <span className="text-[10px] text-blue-200 block">Students view ONLY published results</span>
               </div>
             </div>
           </div>
 
-          {/* 1. Active Grading Scheme & Rules Definition Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div>
+          {/* Sub-tab Navigation */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setResultsSubTab('review')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                resultsSubTab === 'review'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Batch Review & Publication Queue</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setResultsSubTab('calculation')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                resultsSubTab === 'calculation'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>Calculation Engine & Schemes</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setResultsSubTab('audit');
+                fetchAuditLogs();
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                resultsSubTab === 'audit'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Immutable Audit Trail Logs</span>
+            </button>
+          </div>
+
+          {/* ================================================================= */}
+          {/* SUB-TAB 1: REVIEW, MODERATION & PUBLICATION DESK                   */}
+          {/* ================================================================= */}
+          {resultsSubTab === 'review' && (
+            <div className="space-y-6">
+              {/* Filter & Refresh Controls */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-700">Academic Year:</span>
+                    <select
+                      value={calcYear}
+                      onChange={(e) => setCalcYear(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                    >
+                      <option value="2024-2025">2024-2025</option>
+                      <option value="2023-2024">2023-2024</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-700">Semester:</span>
+                    <select
+                      value={calcSemester}
+                      onChange={(e) => setCalcSemester(Number(e.target.value))}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                        <option key={s} value={s}>Semester {s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-blue-700" />
-                  <h3 className="text-base font-bold text-slate-900">
-                    Configured Academic Grading Scheme
-                  </h3>
-                  <span className="text-xs font-mono font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded">
-                    {activeScheme?.schemeVersion || 'Autonomous Scheme 2022 v1'}
+                  <button
+                    type="button"
+                    onClick={() => { fetchBatches(); fetchAuditLogs(); }}
+                    disabled={batchesLoading}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${batchesLoading ? 'animate-spin' : ''}`} />
+                    Refresh Queue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCorrectionForm({
+                        prn: '',
+                        courseCode: '',
+                        academicYear: calcYear,
+                        semester: calcSemester,
+                        internalMarks: '',
+                        eseMarks: '',
+                        reason: '',
+                      });
+                      setShowCorrectionModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Post-Publication Mark Correction
+                  </button>
+                </div>
+              </div>
+
+              {/* CARD 1: COURSE MARKS MODERATION QUEUE (Faculty Evaluations) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-blue-700" />
+                      Course Evaluation Review Queue (Faculty Marks)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Review marks submitted by assigned faculty. Approve verified rosters or return them with a mandatory correction reason.
+                    </p>
+                  </div>
+                  <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-mono self-start sm:self-auto">
+                    {batchesData.courseBatches.length} Allocated Courses
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Confirmed vs Provisional Rules Definition • Autonomous Scheme 2022
-                </p>
+
+                {batchesLoading ? (
+                  <div className="p-8 text-center text-xs text-slate-500">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
+                    Loading course evaluation batches...
+                  </div>
+                ) : batchesData.courseBatches.length === 0 ? (
+                  <div className="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                    No course evaluation records found for {calcYear} Semester {calcSemester}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-4">Course</th>
+                          <th className="py-3 px-3">Dept & Type</th>
+                          <th className="py-3 px-3 text-center">Enrolled</th>
+                          <th className="py-3 px-3 text-center">Submitted</th>
+                          <th className="py-3 px-3 text-center">Status</th>
+                          <th className="py-3 px-4 text-right">Moderation Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {batchesData.courseBatches.map((b) => (
+                          <tr key={b.subjectId} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className="font-mono font-bold text-blue-900 block">{b.subjectCode}</span>
+                              <span className="text-slate-800 font-semibold">{b.subjectName}</span>
+                            </td>
+                            <td className="py-3 px-3 text-slate-600">
+                              <span className="block font-medium">{b.department}</span>
+                              <span className="text-[11px] text-slate-400">{b.credits} Credits</span>
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono font-bold text-slate-700">
+                              {b.totalStudents}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono">
+                              <span className="font-bold text-indigo-700">{b.submittedCount}</span>
+                              <span className="text-slate-400 text-[10px]"> / {b.totalStudents}</span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              {b.batchStatus === 'Published' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                                  <Award className="w-3 h-3 text-blue-700" /> Published
+                                </span>
+                              ) : b.batchStatus === 'Approved' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Approved
+                                </span>
+                              ) : b.batchStatus === 'Returned' ? (
+                                <span
+                                  title={b.returnReason ? `Return Reason: ${b.returnReason}` : 'Returned'}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300"
+                                >
+                                  <AlertTriangle className="w-3 h-3 text-rose-600" /> Returned
+                                </span>
+                              ) : b.batchStatus === 'Submitted' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                                  <Lock className="w-3 h-3 text-indigo-600" /> Submitted
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                  <Clock className="w-3 h-3 text-slate-400" /> Draft / Pending
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {b.batchStatus === 'Submitted' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={actionInProgress}
+                                      onClick={() => handleApproveBatch({ batchType: 'course', subjectId: b.subjectId })}
+                                      className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      <Check className="w-3 h-3" /> Approve
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={actionInProgress}
+                                      onClick={() => setReturnModal({
+                                        batchType: 'course',
+                                        subjectId: b.subjectId,
+                                        title: `Return ${b.subjectCode} (${b.subjectName}) for Corrections`,
+                                      })}
+                                      className="px-2.5 py-1 bg-rose-50 border border-rose-300 hover:bg-rose-100 text-rose-800 font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      <AlertTriangle className="w-3 h-3 text-rose-600" /> Return
+                                    </button>
+                                  </>
+                                ) : b.batchStatus === 'Returned' ? (
+                                  <span className="text-[11px] text-amber-800 font-medium italic truncate max-w-xs block" title={b.returnReason}>
+                                    Pending correction: "{b.returnReason}"
+                                  </span>
+                                ) : b.batchStatus === 'Approved' ? (
+                                  <span className="text-[11px] text-emerald-800 font-semibold flex items-center gap-1 justify-end">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Ready for Publication
+                                  </span>
+                                ) : b.batchStatus === 'Published' ? (
+                                  <span className="text-[11px] text-blue-800 font-semibold flex items-center gap-1 justify-end">
+                                    <Globe className="w-3.5 h-3.5 text-blue-600" /> Live on Marksheet
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic">
+                                    Awaiting faculty submission
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
-                  Rounding: <strong>{activeScheme?.roundingConventions?.decimalPlaces || 2} Decimals (Half-Up)</strong>
-                </span>
-                <span className="text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
-                  Min Passing: <strong>{activeScheme?.passingRequirements?.minPassingPercentage || 40}%</strong>
-                </span>
+              {/* CARD 2: SEMESTER RESULT PUBLICATION DESK (Cohort Release Authority) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-emerald-700" />
+                      Semester Cohort Publication Desk (Student Marksheet Release)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Authorize publication of approved semester result batches. Students will only be able to view their Statement of Grades once published here.
+                    </p>
+                  </div>
+                  <span className="text-xs bg-blue-50 text-blue-900 border border-blue-200 px-2.5 py-1 rounded-md font-mono self-start sm:self-auto">
+                    {batchesData.semesterBatches.length} Cohort Batches
+                  </span>
+                </div>
+
+                {/* Autonomous Publication Rules Box */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1 text-slate-700">
+                  <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-blue-700" />
+                    <span>Autonomous Examination Publication Rules:</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    1. Draft results are strictly private. 2. Cohorts must be formally <strong>Approved</strong> before publishing. 3. Publishing opens the Statement of Grades preview to authenticated students. 4. Corrections post-publication require authorization and an immutable recorded reason.
+                  </p>
+                </div>
+
+                {batchesLoading ? (
+                  <div className="p-8 text-center text-xs text-slate-500">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
+                    Loading semester cohorts...
+                  </div>
+                ) : batchesData.semesterBatches.length === 0 ? (
+                  <div className="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                    No calculated semester results found for {calcYear} Semester {calcSemester}. Run the Calculation Engine first in the <strong>"Calculation Engine & Schemes"</strong> tab.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-4">Cohort / Branch</th>
+                          <th className="py-3 px-3 text-center">Candidates</th>
+                          <th className="py-3 px-3 text-center">Pass / Fail</th>
+                          <th className="py-3 px-3 text-center">Avg SGPA</th>
+                          <th className="py-3 px-3 text-center">Lifecycle Status</th>
+                          <th className="py-3 px-4 text-right">Publication Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {batchesData.semesterBatches.map((b) => (
+                          <tr key={b.branch} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className="font-bold text-slate-900 block">{b.branch}</span>
+                              <span className="text-[11px] text-slate-500 font-mono">
+                                {b.academicYear} • Semester {b.semester}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono font-bold text-slate-800">
+                              {b.totalCalculated}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono text-[11px]">
+                              <span className="text-emerald-700 font-bold">{b.passCount} Pass</span>
+                              <span className="text-slate-400"> / </span>
+                              <span className="text-rose-700 font-bold">{b.failCount} Fail</span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <span className="font-mono font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200">
+                                {b.averageSgpa?.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              {b.reviewStatus === 'Published' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
+                                  <Globe className="w-3 h-3 text-blue-700" /> Published to Students
+                                </span>
+                              ) : b.reviewStatus === 'Approved' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-700" /> Approved by COE
+                                </span>
+                              ) : b.reviewStatus === 'Returned' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-900 border border-rose-300">
+                                  <AlertTriangle className="w-3 h-3 text-rose-700" /> Returned
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                                  <Clock className="w-3 h-3 text-amber-700" /> Draft (Unapproved)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {b.reviewStatus === 'Draft' || b.reviewStatus === 'Returned' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={actionInProgress}
+                                      onClick={() => handleApproveBatch({ batchType: 'semester', branch: b.branch })}
+                                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      <Check className="w-3.5 h-3.5" /> Approve Cohort
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={actionInProgress}
+                                      onClick={() => setReturnModal({
+                                        batchType: 'semester',
+                                        branch: b.branch,
+                                        title: `Return Semester Results for ${b.branch} (Sem ${b.semester})`,
+                                      })}
+                                      className="px-3 py-1.5 bg-rose-50 border border-rose-300 hover:bg-rose-100 text-rose-800 font-bold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" /> Return
+                                    </button>
+                                  </>
+                                ) : b.reviewStatus === 'Approved' ? (
+                                  <button
+                                    type="button"
+                                    disabled={actionInProgress}
+                                    onClick={() => handlePublishBatch({ branch: b.branch })}
+                                    className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Send className="w-3.5 h-3.5 text-blue-200" /> Publish Official Results
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCorrectionForm({
+                                          prn: '',
+                                          courseCode: '',
+                                          academicYear: b.academicYear,
+                                          semester: b.semester,
+                                          internalMarks: '',
+                                          eseMarks: '',
+                                          reason: '',
+                                        });
+                                        setShowCorrectionModal(true);
+                                      }}
+                                      className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Edit3 className="w-3 h-3 text-indigo-600" /> Correct Mark
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={actionInProgress}
+                                      onClick={() => setUnpublishModal({
+                                        academicYear: b.academicYear,
+                                        semester: b.semester,
+                                        branch: b.branch,
+                                        count: b.totalCalculated,
+                                      })}
+                                      className="px-2.5 py-1 bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                    >
+                                      <Lock className="w-3 h-3 text-amber-700" /> Unpublish
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
+          )}
 
-            {/* Confirmed vs Provisional Grade Boundaries Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-100/80 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-4 text-center">Grade</th>
-                    <th className="py-2.5 px-4 text-center">Percentage Boundary</th>
-                    <th className="py-2.5 px-4 text-center">Grade Points</th>
-                    <th className="py-2.5 px-4">Verification Status</th>
-                    <th className="py-2.5 px-4">Classification</th>
-                    <th className="py-2.5 px-4 text-center">Passing Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-sans">
-                  {[
-                    { grade: 'O', range: '90% – 100%', gp: 10, confirmed: false, desc: 'Outstanding', isPassing: true },
-                    { grade: 'A+', range: '80% – 89%', gp: 9, confirmed: true, desc: 'Excellent', isPassing: true },
-                    { grade: 'A', range: '70% – 79%', gp: 8, confirmed: true, desc: 'Very Good', isPassing: true },
-                    { grade: 'B+', range: '60% – 69%', gp: 7, confirmed: true, desc: 'Good', isPassing: true },
-                    { grade: 'B', range: '50% – 59%', gp: 6, confirmed: false, desc: 'Above Average', isPassing: true },
-                    { grade: 'C', range: '40% – 49%', gp: 5, confirmed: false, desc: 'Average / Passing Threshold', isPassing: true },
-                    { grade: 'F', range: 'Below 40%', gp: 0, confirmed: false, desc: 'Fail', isPassing: false },
-                  ].map((rule) => (
-                    <tr key={rule.grade} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-4 text-center font-bold text-slate-900 font-mono text-sm">
-                        {rule.grade}
-                      </td>
-                      <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-700">
-                        {rule.range}
-                      </td>
-                      <td className="py-2.5 px-4 text-center font-mono font-extrabold text-blue-900">
-                        {rule.gp}
-                      </td>
-                      <td className="py-2.5 px-4">
-                        {rule.confirmed ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Confirmed (Official Marksheet)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                            <AlertCircle className="w-3 h-3 text-amber-600" />
-                            Provisional Scale
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-4 text-slate-600">
-                        {rule.desc}
-                      </td>
-                      <td className="py-2.5 px-4 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          rule.isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {rule.isPassing ? 'PASS' : 'FAIL'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mathematical Formula Note */}
-            <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4 text-xs space-y-1.5 text-blue-950">
-              <div className="font-bold flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-blue-700" />
-                <span>Authoritative SGPA Formula (Autonomous Credit-Weighted Average):</span>
-              </div>
-              <p className="font-mono text-xs bg-white border border-blue-200 p-2 rounded-lg text-blue-900">
-                SGPA = ∑ (Credits_i × GradePoints_i) / ∑ (Credits_i) = Total Credit Points (GP) / Total Registered Credits (CR)
-              </p>
-              <p className="text-[11px] text-slate-600">
-                * Note: Evaluated on official 9-subject curriculum scheme. Formally marked provisional pending receipt of official Controller of Examinations notification.
-              </p>
-            </div>
-          </div>
-
-          {/* 2. Automatic Semester Result Calculation Console */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Play className="w-4 h-4 text-blue-700 fill-blue-700" />
-                  Cohort Calculation Console
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Execute backend evaluation for all enrolled candidates using submitted course marks.
-                </p>
-              </div>
-
-              {/* Action Button: Run Calculation Engine */}
-              <button
-                type="button"
-                onClick={handleRunCalculation}
-                disabled={calculating}
-                className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer self-start sm:self-auto"
-              >
-                <Calculator className={`w-4 h-4 ${calculating ? 'animate-spin' : ''}`} />
-                {calculating ? 'Calculating Performance...' : 'Run Result Calculation Engine'}
-              </button>
-            </div>
-
-            {/* Filter Controls for Calculation */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Academic Year</label>
-                <select
-                  value={calcYear}
-                  onChange={(e) => setCalcYear(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
-                >
-                  <option value="2024-2025">2024-2025</option>
-                  <option value="2023-2024">2023-2024</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Semester</label>
-                <select
-                  value={calcSemester}
-                  onChange={(e) => setCalcSemester(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                    <option key={s} value={s}>Semester {s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Department</label>
-                <select
-                  value={calcDepartment}
-                  onChange={(e) => setCalcDepartment(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
-                >
-                  <option value="Computer Engineering">Computer Engineering</option>
-                  <option value="Information Technology">Information Technology</option>
-                  <option value="Artificial Intelligence & Data Science">AI & Data Science</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Division</label>
-                <select
-                  value={calcDivision}
-                  onChange={(e) => setCalcDivision(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
-                >
-                  <option value="ALL">All Divisions</option>
-                  <option value="A">Division A</option>
-                  <option value="B">Division B</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Calculation Summary Metrics (if available) */}
-            {calculationSummary && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <span className="text-[11px] font-medium text-slate-500">Cohort Candidates</span>
-                  <p className="text-lg font-bold text-slate-900">{calculationSummary.totalCohortSize}</p>
-                </div>
-                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                  <span className="text-[11px] font-medium text-emerald-700">Calculated Results</span>
-                  <p className="text-lg font-bold text-emerald-900">{calculationSummary.calculatedCount}</p>
-                </div>
-                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
-                  <span className="text-[11px] font-medium text-amber-700">Skipped (Missing Marks)</span>
-                  <p className="text-lg font-bold text-amber-900">{calculationSummary.skippedCount}</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
-                  <span className="text-[11px] font-medium text-blue-700">Publication State</span>
-                  <p className="text-xs font-bold text-blue-900 mt-1">Unpublished (Draft)</p>
-                </div>
-              </div>
-            )}
-
-            {/* Missing Marks Alert (if any students were skipped) */}
-            {missingMarksReport.length > 0 && (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-900">
-                <div className="flex items-center gap-2 font-bold text-amber-800">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Missing Marks Detected ({missingMarksReport.length} candidates skipped):</span>
-                </div>
-                <p className="text-[11px] text-amber-800">
-                  The calculation engine strictly refuses to generate corrupted partial results. The following candidates have courses without submitted faculty marks:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pt-1">
-                  {missingMarksReport.map((m) => (
-                    <div key={m.prn} className="bg-white p-2 rounded border border-amber-200 text-[11px]">
-                      <strong>{m.prn}</strong> - {m.name}
-                      <span className="text-amber-700 block text-[10px]">
-                        Missing {m.missingCount} course(s): {m.missingCourses.map(c => c.subjectCode).join(', ')}
+          {/* ================================================================= */}
+          {/* SUB-TAB 2: CALCULATION ENGINE & GRADING SCHEMES                    */}
+          {/* ================================================================= */}
+          {resultsSubTab === 'calculation' && (
+            <div className="space-y-6">
+              {/* 1. Active Grading Scheme & Rules Definition Card */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Award className="w-5 h-5 text-blue-700" />
+                      <h3 className="text-base font-bold text-slate-900">
+                        Configured Academic Grading Scheme
+                      </h3>
+                      <span className="text-xs font-mono font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded">
+                        {activeScheme?.schemeVersion || 'Autonomous Scheme 2022 v1'}
                       </span>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    <p className="text-xs text-slate-500 mt-1">
+                      Confirmed vs Provisional Rules Definition • Autonomous Scheme 2022
+                    </p>
+                  </div>
 
-            {/* Calculation Results Table */}
-            {calculationResults.length > 0 ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span>Authoritative Calculated Roster ({calculationResults.length} records)</span>
-                  <span className="text-blue-700 text-[11px]">Scheme: {activeScheme?.schemeVersion || 'Autonomous Scheme 2022 v1'}</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
+                      Rounding: <strong>{activeScheme?.roundingConventions?.decimalPlaces || 2} Decimals (Half-Up)</strong>
+                    </span>
+                    <span className="text-slate-600 bg-slate-100 px-2.5 py-1 rounded font-medium">
+                      Min Passing: <strong>{activeScheme?.passingRequirements?.minPassingPercentage || 40}%</strong>
+                    </span>
+                  </div>
                 </div>
 
+                {/* Confirmed vs Provisional Grade Boundaries Table */}
                 <div className="overflow-x-auto border border-slate-200 rounded-xl">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-100/90 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                    <thead className="bg-slate-100/80 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
                       <tr>
-                        <th className="py-3 px-4">PRN</th>
-                        <th className="py-3 px-4">Student Name</th>
-                        <th className="py-3 px-3 text-center">Total CR</th>
-                        <th className="py-3 px-3 text-center">Total EC</th>
-                        <th className="py-3 px-3 text-center">Total GP</th>
-                        <th className="py-3 px-3 text-center">Percentage</th>
-                        <th className="py-3 px-3 text-center">Calculated SGPA</th>
-                        <th className="py-3 px-4 text-center">Result Status</th>
-                        <th className="py-3 px-3 text-center">Publication</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
+                        <th className="py-2.5 px-4 text-center">Grade</th>
+                        <th className="py-2.5 px-4 text-center">Percentage Boundary</th>
+                        <th className="py-2.5 px-4 text-center">Grade Points</th>
+                        <th className="py-2.5 px-4">Verification Status</th>
+                        <th className="py-2.5 px-4">Classification</th>
+                        <th className="py-2.5 px-4 text-center">Passing Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {calculationResults.map((r) => (
-                        <tr key={r.prn} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-blue-950">
-                            {r.prn}
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {[
+                        { grade: 'O', range: '90% – 100%', gp: 10, confirmed: false, desc: 'Outstanding', isPassing: true },
+                        { grade: 'A+', range: '80% – 89%', gp: 9, confirmed: true, desc: 'Excellent', isPassing: true },
+                        { grade: 'A', range: '70% – 79%', gp: 8, confirmed: true, desc: 'Very Good', isPassing: true },
+                        { grade: 'B+', range: '60% – 69%', gp: 7, confirmed: true, desc: 'Good', isPassing: true },
+                        { grade: 'B', range: '50% – 59%', gp: 6, confirmed: false, desc: 'Above Average', isPassing: true },
+                        { grade: 'C', range: '40% – 49%', gp: 5, confirmed: false, desc: 'Average / Passing Threshold', isPassing: true },
+                        { grade: 'F', range: 'Below 40%', gp: 0, confirmed: false, desc: 'Fail', isPassing: false },
+                      ].map((rule) => (
+                        <tr key={rule.grade} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 px-4 text-center font-bold text-slate-900 font-mono text-sm">
+                            {rule.grade}
                           </td>
-                          <td className="py-3 px-4 font-semibold text-slate-900">
-                            {r.studentName}
+                          <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-700">
+                            {rule.range}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-700">
-                            {r.totalCR}
+                          <td className="py-2.5 px-4 text-center font-mono font-extrabold text-blue-900">
+                            {rule.gp}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono font-bold text-emerald-800">
-                            {r.totalEC}
+                          <td className="py-2.5 px-4">
+                            {rule.confirmed ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Confirmed (Official Marksheet)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                <AlertCircle className="w-3 h-3 text-amber-600" />
+                                Provisional Scale
+                              </span>
+                            )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono font-extrabold text-blue-900">
-                            {r.totalGP}
+                          <td className="py-2.5 px-4 text-slate-600">
+                            {rule.desc}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-slate-700">
-                            {r.percentage ? `${r.percentage}%` : '-'}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <span className="font-mono font-black text-sm px-2 py-0.5 rounded bg-blue-50 text-blue-950 border border-blue-200">
-                              {r.sgpa?.toFixed(2)}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                              r.resultStatus?.includes('DISTINCTION')
-                                ? 'bg-purple-100 text-purple-900'
-                                : r.resultStatus?.includes('FIRST CLASS')
-                                ? 'bg-emerald-100 text-emerald-900'
-                                : r.resultStatus?.includes('FAIL')
-                                ? 'bg-rose-100 text-rose-900'
-                                : 'bg-slate-100 text-slate-800'
+                          <td className="py-2.5 px-4 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              rule.isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-100 text-rose-800'
                             }`}>
-                              {r.resultStatus}
+                              {rule.isPassing ? 'PASS' : 'FAIL'}
                             </span>
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                              Unpublished
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleRecalculate(r.prn)}
-                                disabled={recalculatingPrn === r.prn}
-                                className="text-blue-700 hover:text-blue-900 font-bold text-[11px] cursor-pointer"
-                                title="Recalculate after marks corrections"
-                              >
-                                {recalculatingPrn === r.prn ? 'Recalculating...' : 'Recalculate'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedPrn(r.prn);
-                                  setCurrentView('marksheet');
-                                }}
-                                className="text-slate-600 hover:text-slate-900 text-[11px] font-medium cursor-pointer"
-                              >
-                                Preview →
-                              </button>
-                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mathematical Formula Note */}
+                <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4 text-xs space-y-1.5 text-blue-950">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Calculator className="w-4 h-4 text-blue-700" />
+                    <span>Authoritative SGPA Formula (Autonomous Credit-Weighted Average):</span>
+                  </div>
+                  <p className="font-mono text-xs bg-white border border-blue-200 p-2 rounded-lg text-blue-900">
+                    SGPA = ∑ (Credits_i × GradePoints_i) / ∑ (Credits_i) = Total Credit Points (GP) / Total Registered Credits (CR)
+                  </p>
+                  <p className="text-[11px] text-slate-600">
+                    * Note: Evaluated on official 9-subject curriculum scheme. Formally marked provisional pending receipt of official Controller of Examinations notification.
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs">
-                Select session parameters and click <strong>"Run Result Calculation Engine"</strong> to compute SGPA and credit distributions.
+
+              {/* 2. Automatic Semester Result Calculation Console */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Play className="w-4 h-4 text-blue-700 fill-blue-700" />
+                      Cohort Calculation Console
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Execute backend evaluation for all enrolled candidates using submitted course marks.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRunCalculation}
+                    disabled={calculating}
+                    className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer self-start sm:self-auto"
+                  >
+                    <Calculator className={`w-4 h-4 ${calculating ? 'animate-spin' : ''}`} />
+                    {calculating ? 'Calculating Performance...' : 'Run Result Calculation Engine'}
+                  </button>
+                </div>
+
+                {/* Filter Controls for Calculation */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Academic Year</label>
+                    <select
+                      value={calcYear}
+                      onChange={(e) => setCalcYear(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                    >
+                      <option value="2024-2025">2024-2025</option>
+                      <option value="2023-2024">2023-2024</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Semester</label>
+                    <select
+                      value={calcSemester}
+                      onChange={(e) => setCalcSemester(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                        <option key={s} value={s}>Semester {s}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Department</label>
+                    <select
+                      value={calcDepartment}
+                      onChange={(e) => setCalcDepartment(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                    >
+                      <option value="Computer Engineering">Computer Engineering</option>
+                      <option value="Information Technology">Information Technology</option>
+                      <option value="Artificial Intelligence & Data Science">AI & Data Science</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Division</label>
+                    <select
+                      value={calcDivision}
+                      onChange={(e) => setCalcDivision(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+                    >
+                      <option value="ALL">All Divisions</option>
+                      <option value="A">Division A</option>
+                      <option value="B">Division B</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Calculation Summary Metrics (if available) */}
+                {calculationSummary && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <span className="text-[11px] font-medium text-slate-500">Cohort Candidates</span>
+                      <p className="text-lg font-bold text-slate-900">{calculationSummary.totalCohortSize}</p>
+                    </div>
+                    <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                      <span className="text-[11px] font-medium text-emerald-700">Calculated Results</span>
+                      <p className="text-lg font-bold text-emerald-900">{calculationSummary.calculatedCount}</p>
+                    </div>
+                    <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                      <span className="text-[11px] font-medium text-amber-700">Skipped (Missing Marks)</span>
+                      <p className="text-lg font-bold text-amber-900">{calculationSummary.skippedCount}</p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                      <span className="text-[11px] font-medium text-blue-700">Publication State</span>
+                      <p className="text-xs font-bold text-blue-900 mt-1">Unpublished (Draft COE Queue)</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing Marks Alert (if any students were skipped) */}
+                {missingMarksReport.length > 0 && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-900">
+                    <div className="flex items-center gap-2 font-bold text-amber-800">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Missing Marks Detected ({missingMarksReport.length} candidates skipped):</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      The calculation engine strictly refuses to generate corrupted partial results. The following candidates have courses without submitted faculty marks:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pt-1">
+                      {missingMarksReport.map((m) => (
+                        <div key={m.prn} className="bg-white p-2 rounded border border-amber-200 text-[11px]">
+                          <strong>{m.prn}</strong> - {m.name}
+                          <span className="text-amber-700 block text-[10px]">
+                            Missing {m.missingCount} course(s): {m.missingCourses.map(c => c.subjectCode).join(', ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Calculation Results Table */}
+                {calculationResults.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span>Authoritative Calculated Roster ({calculationResults.length} records)</span>
+                      <span className="text-blue-700 text-[11px]">Scheme: {activeScheme?.schemeVersion || 'Autonomous Scheme 2022 v1'}</span>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-100/90 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                          <tr>
+                            <th className="py-3 px-4">PRN</th>
+                            <th className="py-3 px-4">Student Name</th>
+                            <th className="py-3 px-3 text-center">Total CR</th>
+                            <th className="py-3 px-3 text-center">Total EC</th>
+                            <th className="py-3 px-3 text-center">Total GP</th>
+                            <th className="py-3 px-3 text-center">Percentage</th>
+                            <th className="py-3 px-3 text-center">Calculated SGPA</th>
+                            <th className="py-3 px-4 text-center">Result Status</th>
+                            <th className="py-3 px-3 text-center">Publication</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {calculationResults.map((r) => (
+                            <tr key={r.prn} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-blue-950">
+                                {r.prn}
+                              </td>
+                              <td className="py-3 px-4 font-semibold text-slate-900">
+                                {r.studentName}
+                              </td>
+                              <td className="py-3 px-3 text-center font-mono font-bold text-slate-700">
+                                {r.totalCR}
+                              </td>
+                              <td className="py-3 px-3 text-center font-mono font-bold text-emerald-800">
+                                {r.totalEC}
+                              </td>
+                              <td className="py-3 px-3 text-center font-mono font-extrabold text-blue-900">
+                                {r.totalGP}
+                              </td>
+                              <td className="py-3 px-3 text-center font-mono text-slate-700">
+                                {r.percentage ? `${r.percentage}%` : '-'}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <span className="font-mono font-black text-sm px-2 py-0.5 rounded bg-blue-50 text-blue-950 border border-blue-200">
+                                  {r.sgpa?.toFixed(2)}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  r.resultStatus?.includes('DISTINCTION')
+                                    ? 'bg-purple-100 text-purple-900'
+                                    : r.resultStatus?.includes('FIRST CLASS')
+                                    ? 'bg-emerald-100 text-emerald-900'
+                                    : r.resultStatus?.includes('FAIL')
+                                    ? 'bg-rose-100 text-rose-900'
+                                    : 'bg-slate-100 text-slate-800'
+                                }`}>
+                                  {r.resultStatus}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  Unpublished
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRecalculate(r.prn)}
+                                    disabled={recalculatingPrn === r.prn}
+                                    className="text-blue-700 hover:text-blue-900 font-bold text-[11px] cursor-pointer"
+                                    title="Recalculate after marks corrections"
+                                  >
+                                    {recalculatingPrn === r.prn ? 'Recalculating...' : 'Recalculate'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedPrn(r.prn);
+                                      setCurrentView('marksheet');
+                                    }}
+                                    className="text-slate-600 hover:text-slate-900 text-[11px] font-medium cursor-pointer"
+                                  >
+                                    Preview →
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs">
+                    Select session parameters and click <strong>"Run Result Calculation Engine"</strong> to compute SGPA and credit distributions.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* ================================================================= */}
+          {/* SUB-TAB 3: IMMUTABLE AUDIT TRAIL LOGS                              */}
+          {/* ================================================================= */}
+          {resultsSubTab === 'audit' && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <History className="w-4 h-4 text-purple-700" />
+                    Immutable Academic Lifecycle Audit Trail
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Records who performed each action, when it happened, target batch / student PRN, reason, and grading scheme version.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <input
+                    type="text"
+                    value={auditPrnFilter}
+                    onChange={(e) => setAuditPrnFilter(e.target.value.toUpperCase())}
+                    placeholder="Filter by Student PRN..."
+                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fetchAuditLogs(auditPrnFilter)}
+                    disabled={auditLoading}
+                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    Filter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuditPrnFilter(''); fetchAuditLogs(); }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {auditLoading ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-purple-600" />
+                  Loading audit log records...
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                  No audit log entries recorded yet. Actions such as batch submission, approval, return, or publication will appear here.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 text-slate-700 uppercase font-bold tracking-wider text-[11px] border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4">Timestamp</th>
+                        <th className="py-3 px-3">Action</th>
+                        <th className="py-3 px-3">Performed By</th>
+                        <th className="py-3 px-3">Target Scope</th>
+                        <th className="py-3 px-4">Justification Reason</th>
+                        <th className="py-3 px-3 text-right">Scheme Version</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {auditLogs.map((log) => {
+                        const dateObj = new Date(log.timestamp || log.createdAt);
+                        const dateStr = dateObj.toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        });
+                        const timeStr = dateObj.toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+
+                        return (
+                          <tr key={log._id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <span className="font-mono text-slate-800 font-bold block">{dateStr}</span>
+                              <span className="text-slate-400 text-[10px]">{timeStr}</span>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                log.action === 'PUBLISHED'
+                                  ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                  : log.action === 'APPROVED'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  : log.action === 'RETURNED_FOR_CORRECTION'
+                                  ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                  : log.action === 'SUBMITTED_FOR_REVIEW'
+                                  ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                                  : log.action === 'CORRECTED_POST_PUBLICATION'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                  : log.action === 'UNPUBLISHED'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                {log.action}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="font-semibold text-slate-900 block">{log.performedByName}</span>
+                              <span className="text-[10px] text-slate-500 font-bold uppercase">{log.performedByRole}</span>
+                            </td>
+                            <td className="py-3 px-3">
+                              {log.prn && (
+                                <span className="font-mono font-bold text-blue-950 block">PRN: {log.prn}</span>
+                              )}
+                              {log.courseCode && (
+                                <span className="text-[11px] text-slate-700 block">Course: {log.courseCode}</span>
+                              )}
+                              {log.batchId && (
+                                <span className="text-[10px] font-mono text-slate-500 block truncate max-w-xs">{log.batchId}</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              {log.reason ? (
+                                <span className="font-medium text-slate-800 bg-amber-50/70 border border-amber-200 px-2 py-1 rounded block text-[11px]">
+                                  "{log.reason}"
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic text-[11px]">No custom notes recorded</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono text-[11px] text-slate-500">
+                              {log.gradingSchemeVersion || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2687,6 +3513,252 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
                   className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-lg cursor-pointer"
                 >
                   Create Session
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Return for Correction Modal (Stage 6) */}
+      {returnModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-rose-700 font-bold text-base">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <h3>{returnModal.title || 'Return Evaluation for Corrections'}</h3>
+              </div>
+              <button
+                onClick={() => { setReturnModal(null); setReturnReason(''); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-900">
+              Returning unlocks the evaluation roster for the assigned faculty. A specific, transparent reason is required and will be logged in the immutable audit trail.
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <label className="block font-bold text-slate-700 uppercase">
+                Return Reason / Revision Instructions*
+              </label>
+              <textarea
+                rows={4}
+                required
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+                placeholder="Specify the discrepancies detected (e.g. Mismatched internal mark totals for Division A, please review row 12)..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => { setReturnModal(null); setReturnReason(''); }}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionInProgress || !returnReason.trim()}
+                onClick={handleConfirmReturn}
+                className="px-5 py-2 bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white font-bold text-xs rounded-lg cursor-pointer"
+              >
+                {actionInProgress ? 'Returning...' : 'Confirm Return to Faculty'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. Unpublish Modal (Stage 6) */}
+      {unpublishModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-amber-700 font-bold text-base">
+                <Lock className="w-5 h-5 shrink-0" />
+                <h3>Unpublish Results ({unpublishModal.branch})</h3>
+              </div>
+              <button
+                onClick={() => { setUnpublishModal(null); setUnpublishReason(''); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-950 font-medium">
+              Warning: Unpublishing will immediately restrict student access to their online Statement of Grades. A justification reason must be recorded.
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <label className="block font-bold text-slate-700 uppercase">
+                Justification Reason for Unpublishing*
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={unpublishReason}
+                onChange={(e) => setUnpublishReason(e.target.value)}
+                placeholder="State the official reason for withdrawing public results (e.g. Re-moderation committee review requested by Academic Council)..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => { setUnpublishModal(null); setUnpublishReason(''); }}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionInProgress || !unpublishReason.trim()}
+                onClick={handleConfirmUnpublish}
+                className="px-5 py-2 bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs rounded-lg cursor-pointer"
+              >
+                {actionInProgress ? 'Unpublishing...' : 'Confirm Unpublish'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 12. Post-Publication Correction Modal (Stage 6) */}
+      {showCorrectionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-indigo-900 font-bold text-base">
+                <Edit3 className="w-5 h-5 text-indigo-600" />
+                <h3>Authorized Post-Publication Mark Correction</h3>
+              </div>
+              <button
+                onClick={() => setShowCorrectionModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 leading-relaxed">
+              Autonomous Invariant: Corrections to published records are strictly restricted to COE Officers. The system will authoritatively re-evaluate the grade, grade points, and semester SGPA, preserving an immutable audit trail.
+            </div>
+
+            <form onSubmit={handleExecuteCorrection} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase">Candidate PRN*</label>
+                <input
+                  type="text"
+                  required
+                  value={correctionForm.prn}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, prn: e.target.value.toUpperCase() })}
+                  placeholder="e.g. 22UCO01042"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase">Course Code*</label>
+                <input
+                  type="text"
+                  required
+                  value={correctionForm.courseCode}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, courseCode: e.target.value.toUpperCase() })}
+                  placeholder="e.g. CS501"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase">Academic Year</label>
+                <input
+                  type="text"
+                  required
+                  value={correctionForm.academicYear}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, academicYear: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase">Semester (1-8)*</label>
+                <select
+                  value={correctionForm.semester}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, semester: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <option key={s} value={s}>Semester {s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase">Corrected Internal Marks*</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  max="100"
+                  value={correctionForm.internalMarks}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, internalMarks: e.target.value })}
+                  placeholder="e.g. 28"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 uppercase">Corrected ESE / Final Marks*</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  max="100"
+                  value={correctionForm.eseMarks}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, eseMarks: e.target.value })}
+                  placeholder="e.g. 64"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block font-bold text-slate-700 mb-1 uppercase">
+                  Mandatory Justification Reason*
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={correctionForm.reason}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, reason: e.target.value })}
+                  placeholder="e.g. Grievance re-evaluation committee verification approved on 18-Oct-2026..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-medium text-xs focus:bg-white"
+                />
+              </div>
+
+              <div className="sm:col-span-2 flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCorrectionModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionInProgress}
+                  className="px-5 py-2 bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Calculator className="w-3.5 h-3.5" />
+                  {actionInProgress ? 'Processing & Recalculating...' : 'Apply Correction & Recalculate'}
                 </button>
               </div>
             </form>

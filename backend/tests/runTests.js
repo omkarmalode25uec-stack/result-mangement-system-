@@ -67,6 +67,33 @@ async function runTestSuite() {
   console.log('RUNNING STAGE 2 AUTHENTICATION & DATABASE TESTS');
   console.log('====================================================\n');
 
+  // Ensure demo result is published so student marksheet access test succeeds
+  const setupAdminLogin = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier: 'admin@sanjivani.edu.in', password: 'Admin@123' }),
+  });
+  if (setupAdminLogin.ok && setupAdminLogin.data?.token) {
+    await request('/admin/results/batches/approve', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${setupAdminLogin.data.token}` },
+      body: JSON.stringify({
+        batchType: 'semester',
+        academicYear: '2024-2025',
+        semester: 5,
+        branch: 'Computer Engineering',
+      }),
+    });
+    await request('/admin/results/batches/publish', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${setupAdminLogin.data.token}` },
+      body: JSON.stringify({
+        academicYear: '2024-2025',
+        semester: 5,
+        branch: 'Computer Engineering',
+      }),
+    });
+  }
+
   // Test 1: Health Check
   console.log('1. Health Check Endpoint');
   const healthRes = await request('/health');

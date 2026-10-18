@@ -4,6 +4,7 @@ import { FacultyAssignment } from '../models/FacultyAssignment.js';
 import { Subject } from '../models/Subject.js';
 import { StudentProfile } from '../models/StudentProfile.js';
 import { CourseMark } from '../models/CourseMark.js';
+import { AuditLog } from '../models/AuditLog.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -256,7 +257,11 @@ router.get('/courses/:subjectId/students', async (req, res) => {
     // 5. Merge student profiles with existing marks
     let draftCount = 0;
     let submittedCount = 0;
+    let approvedCount = 0;
+    let returnedCount = 0;
+    let publishedCount = 0;
     let pendingCount = 0;
+    let batchReturnReason = null;
 
     const studentRoster = students.map((s) => {
       const existing = marksMap.get(s.prn.toUpperCase());
@@ -268,7 +273,12 @@ router.get('/courses/:subjectId/students', async (req, res) => {
       const status = hasRecord ? existing.status : 'Pending';
 
       if (status === 'Draft') draftCount++;
-      else if (status === 'Submitted' || status === 'Approved') submittedCount++;
+      else if (status === 'Submitted') submittedCount++;
+      else if (status === 'Approved') approvedCount++;
+      else if (status === 'Returned') {
+        returnedCount++;
+        if (existing.returnReason) batchReturnReason = existing.returnReason;
+      } else if (status === 'Published') publishedCount++;
       else pendingCount++;
 
       return {
@@ -285,14 +295,32 @@ router.get('/courses/:subjectId/students', async (req, res) => {
         maxEse: subject.maxEseMarks,
         totalMax: subject.totalMaxMarks || (subject.maxInternalMarks + subject.maxEseMarks),
         status,
+        returnReason: existing?.returnReason || null,
         submittedAt: existing?.submittedAt || null,
+        approvedAt: existing?.approvedAt || null,
+        publishedAt: existing?.publishedAt || null,
         attempt: 1,
       };
     });
 
-    const isAllSubmitted =
-      studentRoster.length > 0 &&
-      submittedCount === studentRoster.length;
+    let batchStatus = 'Not Started';
+    if (publishedCount > 0 && publishedCount === studentRoster.length) {
+      batchStatus = 'Published';
+    } else if (approvedCount > 0 && approvedCount === studentRoster.length) {
+      batchStatus = 'Approved';
+    } else if (returnedCount > 0) {
+      batchStatus = 'Returned';
+    } else if (submittedCount > 0 && submittedCount === studentRoster.length) {
+      batchStatus = 'Submitted';
+    } else if (draftCount > 0 || submittedCount > 0) {
+      batchStatus = 'Draft';
+    }
+
+    // Locked if Approved, Published, or Submitted without returns (faculty can edit if Draft or Returned)
+    const isLocked =
+      batchStatus === 'Published' ||
+      batchStatus === 'Approved' ||
+      (batchStatus === 'Submitted' && returnedCount === 0);
 
     res.json({
       success: true,
@@ -318,10 +346,15 @@ router.get('/courses/:subjectId/students', async (req, res) => {
         totalStudents: studentRoster.length,
         draftCount,
         submittedCount,
+        approvedCount,
+        returnedCount,
+        publishedCount,
         pendingCount,
-        batchStatus: isAllSubmitted ? 'Submitted' : draftCount > 0 ? 'Draft' : 'Not Started',
+        batchStatus,
+        returnReason: batchReturnReason,
       },
-      isLocked: isAllSubmitted,
+      isLocked,
+      returnReason: batchReturnReason,
       students: studentRoster,
     });
   } catch (error) {
@@ -512,6 +545,20 @@ router.post('/marks/save-draft', async (req, res) => {
       });
     }
 
+    // Check if batch is already Approved or Published (must remain locked for faculty)
+    const approvedOrPublished = await CourseMark.findOne({
+      subject: subject._id,
+      academicYear: cleanYear,
+      semester: numSem,
+      status: { $in: ['Approved', 'Published'] },
+    });
+    if (approvedOrPublished) {
+      return res.status(403).json({
+        success: false,
+        message: `Cannot edit marks: This course evaluation batch has already been ${approvedOrPublished.status.toLowerCase()} by the Examination Cell.`,
+      });
+    }
+
     // 3. Validate entries (draft mode: allow partial/empty, but reject negative or exceeding max)
     const errors = await validateMarksArray(marks, subject, false);
     if (errors.length > 0) {
@@ -649,6 +696,20 @@ router.post('/marks/submit', async (req, res) => {
       });
     }
 
+    // Check if batch is already Approved or Published (must remain locked for faculty)
+    const approvedOrPublished = await CourseMark.findOne({
+      subject: subject._id,
+      academicYear: cleanYear,
+      semester: numSem,
+      status: { $in: ['Approved', 'Published'] },
+    });
+    if (approvedOrPublished) {
+      return res.status(403).json({
+        success: false,
+        message: `Cannot submit marks: This course evaluation batch has already been ${approvedOrPublished.status.toLowerCase()} by the Examination Cell.`,
+      });
+    }
+
     // 3. Strict validation: Every entry must have non-empty valid numbers within allowed limits
     const errors = await validateMarksArray(marks, subject, true);
     if (errors.length > 0) {
@@ -701,6 +762,9 @@ router.post('/marks/submit', async (req, res) => {
             totalMax: subject.totalMaxMarks || (subject.maxInternalMarks + subject.maxEseMarks),
             status: 'Submitted',
             submittedAt: submissionTimestamp,
+            returnReason: null,
+            returnedBy: null,
+            returnedAt: null,
             evaluatedBy: profile.name,
             remarks: entry.remarks || '',
           },
@@ -709,6 +773,28 @@ router.post('/marks/submit', async (req, res) => {
       );
 
       submittedRecords.push(record);
+    }
+
+    // Log audit trail for submission
+    try {
+      await AuditLog.create({
+        action: 'SUBMITTED_FOR_REVIEW',
+        entityType: 'CourseMark',
+        entityId: subject._id,
+        batchId: `${cleanYear}_SEM${numSem}_${subject.subjectCode}`,
+        academicYear: cleanYear,
+        semester: numSem,
+        courseCode: subject.subjectCode,
+        performedBy: req.user._id,
+        performedByName: profile.name,
+        performedByRole: 'Faculty',
+        metadata: {
+          count: submittedRecords.length,
+          division: cleanDiv,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('Failed to write AuditLog on submit:', auditErr.message);
     }
 
     res.json({
@@ -763,11 +849,26 @@ router.post('/marks/reopen', async (req, res) => {
       });
     }
 
+    // Verify batch is not Approved or Published
+    const approvedOrPublished = await CourseMark.findOne({
+      subject: subjectId,
+      academicYear: cleanYear,
+      semester: numSem,
+      status: { $in: ['Approved', 'Published'] },
+    });
+    if (approvedOrPublished) {
+      return res.status(403).json({
+        success: false,
+        message: `Cannot reopen marks: This batch has already been ${approvedOrPublished.status.toLowerCase()} by the Examination Cell.`,
+      });
+    }
+
     const filter = {
       subject: subjectId,
       academicYear: cleanYear,
       semester: numSem,
       attempt: 1,
+      status: { $in: ['Submitted', 'Returned'] },
     };
 
     if (cleanDiv && cleanDiv !== 'ALL') {

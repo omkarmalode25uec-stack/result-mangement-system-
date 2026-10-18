@@ -183,6 +183,48 @@ const resultRecordSchema = new mongoose.Schema(
       gradePointsProvisional: [{ type: String }],
       isFormulaConfirmed: { type: Boolean, default: false },
     },
+    reviewStatus: {
+      type: String,
+      enum: ['Draft', 'Submitted', 'Approved', 'Returned', 'Published'],
+      default: 'Draft',
+      index: true,
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    approvedAt: {
+      type: Date,
+    },
+    publishedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    publishedAt: {
+      type: Date,
+    },
+    returnedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    returnedAt: {
+      type: Date,
+    },
+    returnReason: {
+      type: String,
+      trim: true,
+    },
+    auditTrail: [
+      {
+        action: { type: String, required: true },
+        performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        performedByName: { type: String },
+        performedByRole: { type: String },
+        timestamp: { type: Date, default: Date.now },
+        reason: { type: String },
+        gradingSchemeVersion: { type: String },
+      },
+    ],
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

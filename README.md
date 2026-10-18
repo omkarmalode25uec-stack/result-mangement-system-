@@ -343,18 +343,69 @@ npm test
 
 ---
 
-## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, 4, & 5)
+## 🏛️ Stage 6: Result Review, Moderation & Publication Architecture
 
-Run all test suites across authentication, database, administrative operations, faculty marks evaluation, and the automatic result calculation engine:
+Stage 6 implements an institutional, audit-compliant moderation and publication workflow conforming to autonomous examination cell standards:
+
+$$\mathbf{Draft} \longrightarrow \mathbf{Submitted\ for\ Review} \longrightarrow \mathbf{Approved} \longrightarrow \mathbf{Published}$$
+$$(\text{with Return for Correction loop: } \mathbf{Submitted} \longrightarrow \mathbf{Returned} \longrightarrow \mathbf{Corrected} \longrightarrow \mathbf{Submitted})$$
+
+### 1. Controlled Moderation Lifecycle
+- **Faculty Workflow:**
+  - Enters continuous and end-semester evaluations and saves drafts.
+  - Formally submits finalized course marks for review (`POST /api/faculty/marks/submit`).
+  - Tracks review status via visual status badges (`Draft`, `Submitted`, `Returned`, `Approved`, `Published`).
+  - If returned by the Examination Cell, the roster is unlocked (`isLocked: false`) and displays an alert banner containing the **mandatory reviewer return reason**.
+  - Faculty corrects the marked discrepancies and clicks **"Submit Corrected Marks for Review"**.
+  - Once a batch is **Approved** or **Published**, evaluation inputs are locked with an immutable institutional badge (*"Finalized by Examination Cell"*).
+- **Reviewer / Controller of Examinations (COE) Workflow:**
+  - **Batch Review & Publication Queue:** Inspects course evaluation batches and semester result cohorts in real time (`GET /api/admin/results/batches`).
+  - **Missing & Discrepancy Auditing:** Audits student enrollment counts, missing marks, pending submissions, and SGPA distributions.
+  - **Return for Correction Modal:** Returns suspicious or flawed evaluation batches to faculty with a **mandatory recorded justification reason** (`POST /api/admin/results/batches/return`).
+  - **Batch Approval:** Formally approves verified batches (`POST /api/admin/results/batches/approve`).
+  - **Batch Publication:** Formally publishes approved cohorts (`POST /api/admin/results/batches/publish`), stamping official publication timestamps and batch identifiers.
+  - **Unpublishing Mechanism:** Authoritative emergency unpublish with recorded justification (`POST /api/admin/results/batches/unpublish`), instantly revoking student access.
+  - **Post-Publication Mark Correction Modal:** Authorized correction of published grades requiring admin authentication and recorded justification reason (`POST /api/admin/results/correct-published`). Automatically recalculates dependent course totals, credit points, earned credits, and semester SGPA, and stores before/after snapshots in the audit log.
+
+### 2. Publication Rules & Strict Backend Enforcement
+1. **Draft results must never be visible to students:** Queries to `/api/marksheet/:prn` for uncalculated or draft records return `403 Forbidden`.
+2. **Submitted results must remain private:** Results under review are strictly blocked from student access with `403 Forbidden`.
+3. **Approved results remain private until published:** Formally approved batches remain blocked with `403 Forbidden` until official publication.
+4. **Only authorized accounts can approve or publish:** Non-admin roles (Students, Faculty) attempting to approve or publish batches are rejected with `403 Forbidden`.
+5. **Students can access only their own published results:** Students can view their Statement of Grades if and only if `isPublished === true`. Cross-PRN requests return `403 Forbidden`.
+6. **Corrections to published results require authorization and a recorded reason:** Post-publication corrections require admin authorization and reject empty justifications with `400 Bad Request`.
+7. **Immutable Audit Trail:** All critical lifecycle transitions (`SUBMITTED_FOR_REVIEW`, `APPROVED`, `RETURNED_FOR_CORRECTION`, `PUBLISHED`, `UNPUBLISHED`, `CORRECTED_POST_PUBLICATION`) create permanent, immutable audit log records ([`AuditLog.js`](file:///c:/omkar/RMS/backend/models/AuditLog.js)) recording who performed the action, when it happened, the target entity, batch ID, previous/new states, reason, and grading scheme version.
+
+---
+
+## 📡 Documented Stage 6 API Routes
+
+### Result Review, Moderation & Publication (`/api/admin`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/admin/results/batches` | Admin | Lists course mark batches and semester result cohorts with status, student counts, and return reasons. |
+| `POST` | `/api/admin/results/batches/approve` | Admin | Approves course mark batches or semester cohorts; logs `APPROVED` in audit trail. |
+| `POST` | `/api/admin/results/batches/return` | Admin | Returns batch for correction; requires mandatory justification reason; logs `RETURNED_FOR_CORRECTION`. |
+| `POST` | `/api/admin/results/batches/publish` | Admin | Publishes approved result cohorts; strictly rejects unapproved/draft batches; logs `PUBLISHED`. |
+| `POST` | `/api/admin/results/batches/unpublish` | Admin | Revokes cohort publication; requires mandatory justification reason; logs `UNPUBLISHED`. |
+| `POST` | `/api/admin/results/correct-published` | Admin | Post-publication mark correction; validates mark limits; recalculates SGPA; logs before/after snapshots. |
+| `GET` | `/api/admin/results/audit-trail` | Admin | Retrieves immutable audit trail logs with filtering by PRN, batchId, academicYear, and action. |
+
+---
+
+## 🧪 Comprehensive Automated Test Suite (Stages 2, 3, 4, 5 & 6)
+
+Run all test suites across authentication, database, administrative operations, faculty marks evaluation, the automatic result calculation engine, and result review/publication:
 ```bash
-# Run all Stage 2, 3, 4, and 5 tests
+# Run all Stage 2, 3, 4, 5, and 6 tests
 npm test
 ```
-The test suite validates **166 combined assertions**:
+The test suite validates **214 combined assertions**:
 - [x] **Stage 2 (21 tests):** Server health, authentication, cookies, role security, student privacy, duplicate PRNs, logout.
 - [x] **Stage 3 (29 tests):** Student CRUD, deactivation with history preservation, faculty management, credit validation, mark limits, semester match validation, faculty allocations, duplicate assignment prevention, batch CSV import error reports, and table pagination/search.
 - [x] **Stage 4 (43 tests):** Faculty authentication, RBAC authorization, faculty profile, assigned subjects isolation, unassigned subject 403 prevention, eligible student loading, negative mark rejection, limit violation rejection, non-numeric rejection, duplicate PRN in batch rejection, draft saving, backend official total calculation, draft editing/correction, duplicate prevention for student/subject/attempt, incomplete submission rejection, batch submit for review, result non-publishing safety invariant, and draft reopening.
 - [x] **Stage 5 (73 tests):** Total marks calculation (internal + ese), boundary marks (0 & 100), negative marks rejection, exceeding limits rejection, every grade boundary test (O, A+, A, B+, B, C, F), confirmed vs provisional status verification, scheme boundary validation (overlapping ranges rejected, gap detection, inverted ranges rejected, 0% coverage check), rounding conventions (Half-Up vs Truncate), credit points calculation, earned credits on pass/fail, full SGPA calculation with exact reference marksheet match ($183 / 21 = 8.71$), missing marks detection, API endpoints for schemes and calculation, cohort calculation, recalculation after marks corrections, and the strict unpublished result invariant.
+- [x] **Stage 6 (48 tests):** Multi-role authentication, assigned course inspection, Draft save, Draft student privacy invariant (403), Submit for review, Submitted privacy invariant (403), Admin batches queue inspection, Return for correction without reason rejection (400), Return for correction with mandatory reason, Faculty roster unlocking for correction, Corrected marks resubmission, Return reason clearing, Admin course batch approval, Lock enforcement blocking faculty edit/reopen on approved batches (403), Approved privacy invariant (403), Rejection of unapproved batch publication (400/404), Faculty/Student unauthorized publication rejection (403), Authorized batch publication, Published marksheet access (200), Cross-student access rejection (403), Post-publication correction without reason rejection (400), Authorized post-publication correction and SGPA recalculation, Updated marksheet access, Unpublish without reason rejection (400), Authorized unpublish and immediate student access restriction (403), Publication restoration, and Immutable Audit Trail verification (`SUBMITTED_FOR_REVIEW`, `APPROVED`, `RETURNED_FOR_CORRECTION`, `PUBLISHED`, `UNPUBLISHED`, `CORRECTED_POST_PUBLICATION`, with full metadata audit).
 
 ---
 
