@@ -1,21 +1,25 @@
 import express from 'express';
 import { collegeInfo, sampleStudents, sampleMarksheets } from '../data/sampleData.js';
-import { Student } from '../models/Student.js';
-import { Marksheet } from '../models/Marksheet.js';
+import { StudentProfile } from '../models/StudentProfile.js';
+import { ResultRecord } from '../models/ResultRecord.js';
+import { Subject } from '../models/Subject.js';
+import { AcademicSession } from '../models/AcademicSession.js';
+import { FacultyAssignment } from '../models/FacultyAssignment.js';
+import { authenticate, authorize, enforceStudentRecordAccess } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// 1. Health Check
+// 1. Health Check (Public)
 router.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     system: 'Sanjivani College of Engineering - Result Management System (RMS)',
-    stage: 'Stage 1: Project Setup and UI Foundation',
+    stage: 'Stage 2: Authentication and Database',
     timestamp: new Date().toISOString(),
   });
 });
 
-// 2. College Information
+// 2. College Information (Public)
 router.get('/info', (req, res) => {
   res.json({
     success: true,
@@ -23,22 +27,95 @@ router.get('/info', (req, res) => {
   });
 });
 
-// 3. Students list
-router.get('/students', async (req, res) => {
+// 3. System Summary Statistics (Public / Authenticated)
+router.get('/stats', async (req, res) => {
   try {
-    // If DB is connected and has records, prefer DB; otherwise fallback gracefully to sample data
-    let students = [];
+    let studentCount = 2450;
+    let publishedCount = 1820;
+
     try {
-      students = await Student.find().lean();
-    } catch (e) {
-      // DB not connected or empty
+      const dbStudentCount = await StudentProfile.countDocuments();
+      if (dbStudentCount > 0) studentCount = dbStudentCount;
+
+      const dbResultCount = await ResultRecord.countDocuments({ isPublished: true });
+      if (dbResultCount > 0) publishedCount = dbResultCount;
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      data: {
+        totalRegisteredStudents: studentCount,
+        activeSemesters: ['Semester III', 'Semester V', 'Semester VII'],
+        resultsDeclaredCount: publishedCount,
+        pendingEvaluationCount: 630,
+        overallPassPercentage: 94.6,
+        currentAcademicYear: '2024-2025',
+        departments: [
+          'Computer Engineering',
+          'Information Technology',
+          'Artificial Intelligence & Data Science',
+          'Electronics & Computer Engineering',
+          'Mechanical Engineering',
+          'Civil Engineering',
+        ],
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 4. Subjects List (Protected: Any authenticated user)
+router.get('/subjects', authenticate, async (req, res) => {
+  try {
+    const { semester, department } = req.query;
+    const filter = {};
+    if (semester) filter.semester = Number(semester);
+    if (department) filter.department = department;
+
+    const subjects = await Subject.find(filter).sort({ subjectCode: 1 }).lean();
+    res.json({ success: true, count: subjects.length, data: subjects });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 5. Academic Sessions (Protected: Any authenticated user)
+router.get('/sessions', authenticate, async (req, res) => {
+  try {
+    const sessions = await AcademicSession.find().sort({ academicYear: -1, semester: 1 }).lean();
+    res.json({ success: true, count: sessions.length, data: sessions });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 6. Students list (Protected: Faculty and Admin can view all; Students can only view their own)
+router.get('/students', authenticate, async (req, res) => {
+  try {
+    // If student, restrict to self
+    if (req.user.role === 'Student') {
+      const student = await StudentProfile.findOne({ prn: req.user.prn }).lean();
+      return res.json({
+        success: true,
+        count: student ? 1 : 0,
+        data: student ? [student] : [],
+      });
     }
+
+    // Faculty or Admin can search all students
+    const { query, branch, semester } = req.query;
+    const filter = {};
+
+    if (branch) filter.branch = branch;
+    if (semester) filter.currentSemester = Number(semester);
+
+    let students = await StudentProfile.find(filter).lean();
 
     if (!students || students.length === 0) {
       students = sampleStudents;
     }
 
-    const { query } = req.query;
     if (query) {
       const q = query.toLowerCase();
       students = students.filter(
@@ -59,75 +136,121 @@ router.get('/students', async (req, res) => {
   }
 });
 
-// 4. Student details by PRN
-router.get('/students/:prn', async (req, res) => {
-  const prn = req.params.prn.toUpperCase();
-  let student = sampleStudents.find((s) => s.prn === prn);
-
-  if (!student) {
+// 7. Student details by PRN (Protected & Enforced: Students can only access their own PRN)
+router.get(
+  '/students/:prn',
+  authenticate,
+  enforceStudentRecordAccess,
+  async (req, res) => {
     try {
-      student = await Student.findOne({ prn }).lean();
-    } catch (e) {}
-  }
+      const prn = req.params.prn.toUpperCase();
+      let student = await StudentProfile.findOne({ prn }).lean();
 
-  if (!student) {
-    return res.status(404).json({
-      success: false,
-      message: `No student found with PRN: ${prn}`,
+      if (!student) {
+        student = sampleStudents.find((s) => s.prn === prn);
+      }
+
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: `No student found with PRN: ${prn}`,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: student,
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// 8. Statement of Grades / Marksheet preview by PRN
+// Protected & Enforced: Students can ONLY access their own PRN
+router.get(
+  '/marksheet/:prn',
+  authenticate,
+  enforceStudentRecordAccess,
+  async (req, res) => {
+    try {
+      const prn = req.params.prn.toUpperCase();
+      let marksheet = await ResultRecord.findOne({ prn }).lean();
+
+      if (!marksheet) {
+        marksheet = sampleMarksheets[prn];
+      }
+
+      if (!marksheet) {
+        return res.status(404).json({
+          success: false,
+          message: `No Statement of Grades found for PRN: ${prn}.`,
+        });
+      }
+
+      res.json({
+        success: true,
+        college: collegeInfo,
+        data: marksheet,
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// 9. Dedicated route for logged-in student to get their own current marksheet
+router.get('/marksheet-me', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'Student' || !req.user.prn) {
+      return res.status(400).json({
+        success: false,
+        message: 'This endpoint is for authenticated students only.',
+      });
+    }
+
+    const prn = req.user.prn.toUpperCase();
+    let marksheet = await ResultRecord.findOne({ prn }).lean();
+
+    if (!marksheet) {
+      marksheet = sampleMarksheets[prn];
+    }
+
+    if (!marksheet) {
+      return res.status(404).json({
+        success: false,
+        message: `No Statement of Grades found for your PRN (${prn}).`,
+      });
+    }
+
+    res.json({
+      success: true,
+      college: collegeInfo,
+      data: marksheet,
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
-
-  res.json({
-    success: true,
-    data: student,
-  });
 });
 
-// 5. Statement of Grades / Marksheet preview by PRN
-router.get('/marksheet/:prn', async (req, res) => {
+// 10. Public sample marksheet preview (for landing page showcase demonstration)
+router.get('/public-preview/:prn', (req, res) => {
   const prn = req.params.prn.toUpperCase();
-  let marksheet = sampleMarksheets[prn];
+  const sample = sampleMarksheets[prn];
 
-  if (!marksheet) {
-    try {
-      marksheet = await Marksheet.findOne({ prn }).lean();
-    } catch (e) {}
-  }
-
-  if (!marksheet) {
+  if (!sample) {
     return res.status(404).json({
       success: false,
-      message: `No Statement of Grades found for PRN: ${prn}. Available sample PRNs: 22UCO01042, 22UIT02015`,
+      message: `No public sample marksheet available for PRN: ${prn}. Available sample PRNs: 22UCO01042, 22UIT02015.`,
     });
   }
 
   res.json({
     success: true,
     college: collegeInfo,
-    data: marksheet,
-  });
-});
-
-// 6. Summary Statistics for Dashboards
-router.get('/stats', (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      totalRegisteredStudents: 2450,
-      activeSemesters: ['Semester III', 'Semester V', 'Semester VII'],
-      resultsDeclaredCount: 1820,
-      pendingEvaluationCount: 630,
-      overallPassPercentage: 94.6,
-      currentAcademicYear: '2024-2025',
-      departments: [
-        'Computer Engineering',
-        'Information Technology',
-        'Artificial Intelligence & Data Science',
-        'Electronics & Computer Engineering',
-        'Mechanical Engineering',
-        'Civil Engineering',
-      ],
-    },
+    data: sample,
+    isSamplePreview: true,
   });
 });
 

@@ -4,9 +4,9 @@
 
 ---
 
-## 📌 Stage 1: Project Setup and UI Foundation
+## 📌 Project Overview
 
-This project is a modern, responsive, full-stack Result Management System (RMS) developed for **Sanjivani College of Engineering**. The portal provides an official blue-and-white academic design for students, faculty, and examination controllers to view results, manage grade submissions, and generate authentic **Statements of Grades (Marksheets)** conforming to autonomous university standards.
+This project is a modern, full-stack Result Management System (RMS) designed for **Sanjivani College of Engineering**. The portal provides an authentic blue-and-white academic user interface and secure backend for students, faculty, and examination controllers (COE) to view results, manage grade submissions, provision verified candidate accounts, and inspect autonomous **Statements of Grades (Marksheets)** conforming to Savitribai Phule Pune University standards.
 
 ---
 
@@ -16,7 +16,8 @@ This project is a modern, responsive, full-stack Result Management System (RMS) 
 - **Styling:** Tailwind CSS (Custom blue-and-white academic theme with print styling)
 - **Icons:** Lucide React
 - **Backend:** Node.js & Express.js (ES Modules)
-- **Database:** MongoDB with Mongoose (Configured with graceful fallback for offline/development mode)
+- **Database:** MongoDB with Mongoose (with automated seeding and graceful offline fallback)
+- **Authentication & Security:** bcryptjs password hashing, JSON Web Tokens (JWT), secure HTTP-only cookies (`cookie-parser`), and role-based access control (RBAC)
 - **Language:** JavaScript throughout
 
 ---
@@ -25,26 +26,38 @@ This project is a modern, responsive, full-stack Result Management System (RMS) 
 
 ```
 RMS/
-├── package.json              # Root package orchestrator with concurrent scripts
-├── .gitignore                # Root gitignore protecting .env and node_modules
+├── package.json              # Root orchestrator with dev, build, test, and seed scripts
+├── .gitignore                # Root gitignore protecting .env and build artifacts
 ├── README.md                 # Complete system documentation
 │
-├── backend/                  # Express.js REST API & Mongoose models
+├── backend/                  # Node.js & Express.js REST API
 │   ├── .env.example          # Environment variables template
 │   ├── .env                  # Local environment file (never committed)
 │   ├── .gitignore            # Backend-specific ignore list
-│   ├── package.json          # Express, Mongoose, CORS, Dotenv, Nodemon
-│   ├── server.js             # Express app entry point & middleware
+│   ├── package.json          # Express, Mongoose, JWT, bcryptjs, cookie-parser
+│   ├── server.js             # API entry point, cookie parser & route mounters
 │   ├── config/
-│   │   └── db.js             # Mongoose connection with graceful fallback
+│   │   └── db.js             # Mongoose connection with graceful connection fallback
+│   ├── middleware/
+│   │   └── auth.js           # authenticate, authorize, and enforceStudentRecordAccess
 │   ├── models/
-│   │   ├── Student.js        # Student model (PRN, seatNo, motherName, branch)
-│   │   ├── Course.js         # Course model (code, title, type, credits)
-│   │   └── Marksheet.js      # Marksheet model (grades, GP, CR, EC, SGPA)
+│   │   ├── User.js               # Authentication accounts with bcrypt hashing
+│   │   ├── StudentProfile.js     # Student profile (PRN, rollNo, seatNo, branch)
+│   │   ├── FacultyProfile.js     # Faculty profile (employeeId, name, department)
+│   │   ├── AcademicSession.js    # Academic years & semesters (compound index)
+│   │   ├── Subject.js            # Course subjects, types (TH, PR, TW, etc.) & credits
+│   │   ├── FacultyAssignment.js  # Faculty-subject assignments & divisions
+│   │   └── ResultRecord.js       # Marksheet result records (CR, EC, GP, SGPA, CGPA)
 │   ├── routes/
-│   │   └── api.js            # REST API endpoints (health, students, marksheet, stats)
+│   │   ├── auth.js           # /api/auth (login, logout, me, register rejection)
+│   │   ├── admin.js          # /api/admin (authorized provisioning & user registry)
+│   │   └── api.js            # /api (health, info, students, marksheets, sessions)
+│   ├── utils/
+│   │   └── seedData.js       # Automated database seeder with authorized test accounts
+│   ├── tests/
+│   │   └── runTests.js       # 21-point automated test suite for Stage 2
 │   └── data/
-│       └── sampleData.js     # Clearly labeled fictional sample records
+│       └── sampleData.js     # Fictional sample records
 │
 └── frontend/                 # React + Vite + Tailwind CSS Application
     ├── .env.example          # Frontend environment variables template
@@ -57,19 +70,21 @@ RMS/
     ├── postcss.config.js     # PostCSS plugins
     └── src/
         ├── main.jsx          # React DOM entry
-        ├── App.jsx           # Main router & state manager
+        ├── App.jsx           # Main router & state manager wrapped in AuthProvider
         ├── index.css         # Tailwind directives & media print CSS
+        ├── context/
+        │   └── AuthContext.jsx # Global session management & cookie login/logout
         ├── components/
-        │   ├── Navbar.jsx    # Responsive navigation & role indicators
+        │   ├── Navbar.jsx    # Responsive navigation, role indicators & logout
         │   ├── Footer.jsx    # Institutional footer & academic disclaimer
         │   ├── EmptyState.jsx# Reusable empty state component
-        │   └── SanjivaniHeader.jsx # Institutional seal & Statement header
+        │   └── SanjivaniHeader.jsx # SRES & Autonomous institutional seal header
         ├── pages/
         │   ├── LandingPage.jsx     # Hero, quick PRN lookup & announcements
-        │   ├── RoleLoginPage.jsx   # Role portal selection (No fake auth)
+        │   ├── RoleLoginPage.jsx   # Role portal with real auth & 1-click test fill
         │   ├── StudentDashboard.jsx# Student GPA, semester history & empty state
         │   ├── FacultyDashboard.jsx# Faculty course roster & evaluation queue
-        │   ├── AdminDashboard.jsx  # COE metrics & master candidate registry
+        │   ├── AdminDashboard.jsx  # COE metrics, student registry & provisioning desk
         │   └── MarksheetPreview.jsx# Authentic Statement of Grades preview
         └── data/
             └── fictionalData.js    # Fictional students, courses & marksheets
@@ -77,146 +92,138 @@ RMS/
 
 ---
 
-## 🚀 Getting Started & Startup Commands
+## 🔐 Stage 2: Authentication & Security Architecture
 
-### Prerequisites
-- **Node.js**: v18.0.0 or higher (v24+ recommended)
-- **npm**: v9.0.0 or higher
-- **MongoDB** *(Optional for Stage 1)*: Backend server automatically detects local MongoDB daemon (`mongodb://127.0.0.1:27017/sanjivani_rms`) or runs in graceful offline/mock mode for UI evaluation.
+### 1. User Roles & Capabilities
+| Role | Login Identifier | Default Capabilities |
+| :--- | :--- | :--- |
+| **Student** | PRN + Password | View personal academic profile, current semester performance, semester history, and download/print verified Statement of Grades. **Strictly restricted from viewing other students' records.** |
+| **Faculty** | Email / Employee ID + Password | Access Faculty Evaluation Desk, inspect assigned courses, view student roster marks, and monitor evaluation completion status. |
+| **Admin** | Email / Admin ID + Password | Access Controller of Examinations (COE) Control Room, view institutional metrics, inspect master candidate registry, and **provision authorized student, faculty, and admin accounts**. |
 
-### Option 1: Run Full-Stack Simultaneously (Recommended)
+### 2. Pre-Seeded Authorized Test Credentials
+The database automatically seeds these authorized test accounts on startup:
+
+| Role | Username / Identifier | Password | Description |
+| :--- | :--- | :--- | :--- |
+| **Student (CE)** | `22UCO01042` | `Student@123` | Aarav Rajesh Shinde (B.Tech Computer Engineering) |
+| **Student (IT)** | `22UIT02015` | `Student@123` | Priya Sanjay Deshmukh (B.Tech Information Technology) |
+| **Faculty** | `faculty.cs@sanjivani.edu.in` | `Faculty@123` | Prof. R. M. Kulkarni (Computer Engineering) |
+| **Admin (COE)** | `admin@sanjivani.edu.in` | `Admin@123` | Dr. K. S. Patil (Controller of Examinations) |
+
+> **Convenience Feature:** On the **Role-Selection Login** page (`/login`), click the **"Auto-Fill Credentials"** button on any tab to populate credentials instantly.
+
+### 3. Security Highlights
+- **Password Hashing:** All passwords are encrypted with `bcrypt` (10 salt rounds). Plaintext passwords are never saved.
+- **Password Exposure Prevention:** Mongoose `toJSON` transforms and API projections (`.select('-passwordHash')`) guarantee that password hashes are never leaked over API responses.
+- **HTTP-Only Cookies:** Sessions use JWT stored in an HTTP-only cookie (`rms_token`) with `sameSite: 'lax'` to prevent cross-site scripting (XSS) extraction.
+- **Public Self-Registration Prevention:** `POST /api/auth/register` returns `403 Forbidden`. Student accounts can only be provisioned through authorized administrative procedures.
+- **Cross-Record Access Control:** Middleware `enforceStudentRecordAccess` ensures that students attempting to query another candidate's PRN are rejected with `403 Forbidden`.
+- **Admin Privilege Protection:** Faculty and Students attempting to access administrative provisioning routes are rejected with `403 Forbidden`.
+
+---
+
+## 🗄️ MongoDB Mongoose Models
+
+1. **`User` (`backend/models/User.js`):**
+   - Fields: `username`, `email`, `prn`, `employeeId`, `passwordHash`, `role` (`['Student', 'Faculty', 'Admin']`), `name`, `isActive`, `lastLogin`, `timestamps`.
+   - Methods: `comparePassword(candidatePassword)`, `hashPassword(plainPassword)`.
+2. **`StudentProfile` (`backend/models/StudentProfile.js`):**
+   - Fields: `user` (ref: `User`), `prn` (unique index), `rollNo`, `seatNo`, `name`, `motherName`, `branch`, `department`, `academicYear`, `currentSemester`, `division`, `email`, `phone`, `status`.
+3. **`FacultyProfile` (`backend/models/FacultyProfile.js`):**
+   - Fields: `user` (ref: `User`), `employeeId` (unique index), `name`, `department`, `designation`, `email`, `phone`, `specialization`, `isActive`.
+4. **`AcademicSession` (`backend/models/AcademicSession.js`):**
+   - Fields: `academicYear`, `semester`, `semesterLabel`, `term` (`Odd` / `Even`), `examinationSession`, `isCurrent`, `status`.
+   - Compound Unique Index: `{ academicYear: 1, semester: 1 }`.
+5. **`Subject` (`backend/models/Subject.js`):**
+   - Fields: `subjectCode` (unique), `subjectName`, `subjectType` (`TH`, `PR`, `OR`, `TW`, `PE`, `OE`), `credits`, `semester`, `department`, `maxInternalMarks`, `maxEseMarks`, `totalMaxMarks`.
+6. **`FacultyAssignment` (`backend/models/FacultyAssignment.js`):**
+   - Fields: `faculty` (ref: `FacultyProfile`), `subject` (ref: `Subject`), `academicYear`, `semester`, `division`, `assignedBy` (ref: `User`), `status`.
+   - Compound Unique Index: `{ faculty: 1, subject: 1, academicYear: 1, division: 1 }`.
+7. **`ResultRecord` (`backend/models/ResultRecord.js`):**
+   - Fields: `student` (ref: `StudentProfile`), `prn` (unique index per term), `seatNo`, `studentName`, `motherName`, `branch`, `academicYear`, `semester`, `subjects` (Array of scored courses), `totalCR`, `totalEC`, `totalGP`, `sgpa`, `cgpa`, `resultStatus`, `resultDate`, `isPublished`.
+
+---
+
+## 📡 Documented API Routes
+
+### Authentication (`/api/auth`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/login` | Public | Authenticates credentials and sets HTTP-only JWT cookie. |
+| `POST` | `/api/auth/logout` | Authenticated | Clears the `rms_token` HTTP-only cookie. |
+| `GET` | `/api/auth/me` | Authenticated | Returns current authenticated user and linked profile. |
+| `POST` | `/api/auth/register` | Public | Always returns `403 Forbidden` (self-registration prevented). |
+
+### Administration & Provisioning (`/api/admin`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/admin/provision/student` | Admin Only | Provisions a student account & profile with duplicate PRN checks. |
+| `POST` | `/api/admin/provision/faculty` | Admin Only | Provisions a faculty account & profile with duplicate ID checks. |
+| `POST` | `/api/admin/provision/admin` | Admin Only | Provisions an authorized administrative user. |
+| `GET` | `/api/admin/users` | Admin Only | Lists system users with sensitive fields omitted. |
+
+### Academic & Marksheet Data (`/api`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/health` | Public | Health check and stage identification. |
+| `GET` | `/api/info` | Public | College accreditation, trust, and contact details. |
+| `GET` | `/api/stats` | Public | Summary metrics for candidates, results, and departments. |
+| `GET` | `/api/students` | Protected | Lists student records (restricted to self if Student). |
+| `GET` | `/api/students/:prn` | Protected | Details for PRN (cross-student access blocked for Students). |
+| `GET` | `/api/marksheet/:prn` | Protected | Statement of Grades for PRN (cross-student access blocked). |
+| `GET` | `/api/marksheet-me` | Student Only | Directly fetches logged-in student's marksheet. |
+| `GET` | `/api/public-preview/:prn` | Public | Read-only sample Statement preview for landing showcase. |
+| `GET` | `/api/subjects` | Protected | Course catalog filtered by semester/department. |
+| `GET` | `/api/sessions` | Protected | Academic sessions and terms history. |
+
+---
+
+## 🧪 Running Automated Tests
+
+A dedicated 21-assertion automated test suite is included in `backend/tests/runTests.js`.
+
+To run tests:
+```bash
+# Ensure backend server is running in another terminal
+npm test
+```
+The test suite validates:
+- [x] Server health status
+- [x] Successful Student, Faculty, and Admin logins
+- [x] Cookie generation and password hash omission
+- [x] Failed logins on incorrect password and non-existent users
+- [x] Public self-registration rejection (403 Forbidden)
+- [x] Unauthenticated request rejection (401 Unauthorized)
+- [x] Student accessing own Statement of Grades (200 OK)
+- [x] **Student attempting to access another student's record (403 Forbidden)**
+- [x] **Faculty attempting to access Admin endpoints (403 Forbidden)**
+- [x] Admin successfully provisioning a new candidate account (201 Created)
+- [x] **Duplicate PRN prevention (409 Conflict)**
+- [x] Clean logout and cookie revocation
+
+---
+
+## 🚀 Startup Commands
+
+### Run Full-Stack Simultaneously (Recommended)
 From the root `RMS` folder:
 ```bash
-# 1. Install all dependencies across root, backend, and frontend
-npm run install:all
-
-# 2. Run both Backend API (port 5000) and Frontend (port 5173) concurrently
 npm run dev
 ```
+- **Frontend:** [http://localhost:5173](http://localhost:5173)
+- **Backend API:** [http://localhost:5000](http://localhost:5000)
 
-### Option 2: Run Frontend and Backend Individually
+### Or Run Individually:
 
-#### Starting the Backend API
+**Backend:**
 ```bash
 cd backend
-npm install
 npm run dev
-# Server will start on: http://localhost:5000
-# API Health Check:   http://localhost:5000/api/health
 ```
 
-#### Starting the Frontend UI
+**Frontend:**
 ```bash
 cd frontend
-npm install
 npm run dev
-# Frontend will be live on: http://localhost:5173
-```
-
----
-
-## ⚙️ Environment Variables
-
-### Backend (`backend/.env`)
-Copy `backend/.env.example` to `backend/.env`:
-```env
-PORT=5000
-NODE_ENV=development
-MONGODB_URI=mongodb://127.0.0.1:27017/sanjivani_rms
-CLIENT_URL=http://localhost:5173
-```
-
-### Frontend (`frontend/.env`)
-Copy `frontend/.env.example` to `frontend/.env`:
-```env
-VITE_API_URL=http://localhost:5000/api
-VITE_COLLEGE_NAME=Sanjivani College of Engineering
-```
-
-> **Security Note:** `.env` files are ignored by `.gitignore` in both root, frontend, and backend to guarantee that secrets are never committed to version control.
-
----
-
-## 📄 Stage 1 Implemented Pages & Features
-
-1. **Landing Page (`/`):**
-   - Institutional banner with Sanjivani Rural Education Society emblem placeholder.
-   - Quick PRN Result Lookup with instant validation and feedback.
-   - Direct portal selection cards for Students, Faculty, and Admin.
-   - Examination Cell announcement board for Winter 2024 session notices.
-
-2. **Role-Selection Login Page:**
-   - Clearly separated access portals for Students (PRN & Mother's Name), Faculty (Faculty ID & Department), and COE Admin.
-   - Complies strictly with the **No Fake Authentication** guideline: provides honest, transparent UI form previews with sample loaders and direct navigation to explore role dashboards.
-
-3. **Student Dashboard:**
-   - Candidate academic profile header (Aarav Rajesh Shinde, PRN `22UCO01042`).
-   - Key academic KPIs: SGPA (8.71), CGPA (8.65), Earned Credits (21/21), Active Backlogs (0).
-   - Enrolled course evaluation breakdown for Semester V.
-   - Interactive semester tabs with a demonstration of a **clear empty state** when selecting upcoming Semester VI.
-
-4. **Faculty Dashboard:**
-   - Instructor identity header (Prof. R. M. Kulkarni, Computer Engineering).
-   - Assigned course cards with student enrollment counts and submission badges.
-   - Student roster table with internal marks, ESE scores, and grade status.
-   - Toggle to preview an **empty state** when all submissions are completed.
-
-5. **Admin / COE Dashboard:**
-   - Controller of Examinations institutional metrics: 2,450 total candidates, 1,820 declared results, 94.8% pass percentage.
-   - Master student registry with PRN search filter and direct Statement preview links.
-   - Toggle to preview an **empty state** for resolved grievances.
-
-6. **Statement of Grades (Marksheet Preview):**
-   - High-fidelity visual replication of the Sanjivani College of Engineering Statement of Grades.
-   - Dedicated space for all mandatory academic fields:
-     - **PRN** (Permanent Registration Number)
-     - **Student details** (Name, Mother's Name, Seat No., Branch, Degree)
-     - **Academic Year & Semester** (2024-2025, Semester V Winter 2024 Exam)
-     - **Subject codes & names** (CE501 Database Management Systems, etc.)
-     - **Course Type** (`TH` Theory, `PR` Practical, `OR` Oral, `TW` Term Work, `PE` Professional Elective, `OE` Open Elective)
-     - **Credits (CR) & Earned Credits (EC)**
-     - **Grades & Grade Points (GP)**
-     - **Credit Points** (CR × GP)
-     - **Total CR, Total EC, Total GP, SGPA, CGPA**
-     - **Result Status** (`PASS - FIRST CLASS WITH DISTINCTION`)
-     - **Result Date** (`12-01-2025`)
-   - Official 10-point UGC/SPPU Autonomous grading scheme legend.
-   - Institutional authority signature blocks (Prepared By, Dean Academics, Controller of Examinations).
-   - Print / Save as PDF capability formatted with clean `@media print` CSS rules.
-   - Interactive candidate switcher (Aarav Shinde - CE, Priya Deshmukh - IT, or Withheld Marksheet Empty State).
-
----
-
-## 🧪 Clearly Labelled Fictional Sample Data
-
-All student profiles, PRNs, and marks are fictional learning assets:
-- **Sample Student 1:** `AARAV RAJESH SHINDE` | PRN: `22UCO01042` | B.Tech Computer Engineering | SGPA: `8.71`
-- **Sample Student 2:** `PRIYA SANJAY DESHMUKH` | PRN: `22UIT02015` | B.Tech Information Technology | SGPA: `8.90`
-- **Sample Student 3:** `ROHAN DEEPAK PATIL` | PRN: `23UAI03028` | B.Tech AI & Data Science | SGPA: `8.45`
-
----
-
-## ⚖️ Grading Standards Compliance
-
-The system respects official UGC and Savitribai Phule Pune University autonomous grading conventions:
-| Grade | Description | Grade Point (GP) | Marks Range |
-| :---: | :--- | :---: | :---: |
-| **O** | Outstanding | 10 | 90 – 100 |
-| **A+** | Excellent | 9 | 80 – 89 |
-| **A** | Very Good | 8 | 70 – 79 |
-| **B+** | Good | 7 | 60 – 69 |
-| **B** | Above Average | 6 | 50 – 59 |
-| **C** | Average | 5 | 45 – 49 |
-| **P** | Pass | 4 | 40 – 44 |
-| **F** | Fail | 0 | Below 40 |
-
----
-
-## 🏁 Git & Version Control
-
-To review git status or commit changes:
-```bash
-git status
-git add .
-git commit -m "feat(rms): complete stage 1 project setup and UI foundation"
 ```

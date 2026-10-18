@@ -8,21 +8,104 @@ import {
   Search, 
   Download, 
   FileText, 
-  Layers,
-  Inbox
+  UserPlus,
+  KeyRound,
+  Inbox,
+  Sparkles
 } from 'lucide-react';
 import { FICTIONAL_STUDENTS, ADMIN_STATS, COLLEGE_INFO } from '../data/fictionalData';
 import EmptyState from '../components/EmptyState';
+import { useAuth } from '../context/AuthContext';
 
 export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [showEmptyAudits, setShowEmptyAudits] = useState(false);
+  const [showProvisionModal, setShowProvisionModal] = useState(false);
 
-  const filteredStudents = FICTIONAL_STUDENTS.filter(s =>
+  // Provisioning form state
+  const [newPrn, setNewPrn] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newMotherName, setNewMotherName] = useState('');
+  const [newSeatNo, setNewSeatNo] = useState('');
+  const [newBranch, setNewBranch] = useState('Computer Engineering');
+  const [newPassword, setNewPassword] = useState('Student@123');
+  const [provisionLoading, setProvisionLoading] = useState(false);
+  const [provisionResult, setProvisionResult] = useState(null);
+
+  // Student records list (seeded + provisioned)
+  const [studentList, setStudentList] = useState(FICTIONAL_STUDENTS);
+
+  const filteredStudents = studentList.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.prn.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.branch.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleProvisionStudent = async (e) => {
+    e.preventDefault();
+    setProvisionLoading(true);
+    setProvisionResult(null);
+
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/provision/student`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          prn: newPrn.trim().toUpperCase(),
+          name: newName.trim(),
+          motherName: newMotherName.trim().toUpperCase(),
+          seatNo: newSeatNo.trim().toUpperCase(),
+          branch: newBranch,
+          password: newPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setProvisionResult({
+          type: 'error',
+          message: data.message || 'Failed to provision student record.',
+        });
+      } else {
+        setProvisionResult({
+          type: 'success',
+          message: `Candidate ${newName} (PRN: ${newPrn.toUpperCase()}) successfully provisioned and authorized in database!`,
+        });
+
+        // Add to local list for immediate display
+        const newRecord = {
+          prn: newPrn.trim().toUpperCase(),
+          name: newName.trim(),
+          motherName: newMotherName.trim().toUpperCase(),
+          seatNo: newSeatNo.trim().toUpperCase(),
+          branch: newBranch,
+          semester: 'Semester V',
+          sgpa: 8.50,
+        };
+        setStudentList([newRecord, ...studentList]);
+
+        // Reset inputs
+        setNewPrn('');
+        setNewName('');
+        setNewMotherName('');
+        setNewSeatNo('');
+      }
+    } catch (err) {
+      setProvisionResult({
+        type: 'error',
+        message: 'Could not reach server to provision account.',
+      });
+    } finally {
+      setProvisionLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -38,7 +121,9 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
                 <span className="text-xs font-bold uppercase tracking-wider bg-amber-500 text-blue-950 px-2 py-0.5 rounded">
                   Examination Authority
                 </span>
-                <span className="text-xs text-blue-200">Autonomous Cell • SPPU</span>
+                <span className="text-xs text-blue-200">
+                  {user ? `Logged in: ${user.name}` : 'COE Control Center'}
+                </span>
               </div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight">
                 Controller of Examinations (COE)
@@ -49,16 +134,148 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowProvisionModal(!showProvisionModal)}
+              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-blue-950 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-2 shadow-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>{showProvisionModal ? 'Hide Provisioning Desk' : 'Provision Student Account'}</span>
+            </button>
+
             <button
               onClick={() => setShowEmptyAudits(!showEmptyAudits)}
-              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             >
-              {showEmptyAudits ? 'Show Active Results' : 'Preview Empty Discrepancy Queue'}
+              {showEmptyAudits ? 'Show Active Results' : 'Preview Empty Grievance Queue'}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Authorized Provisioning Desk (Stage 2 Requirement) */}
+      {showProvisionModal && (
+        <div className="bg-white rounded-2xl border-2 border-blue-500 p-6 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-blue-700" />
+              <h3 className="text-base font-bold text-slate-900">
+                Authorized Student Account Provisioning
+              </h3>
+            </div>
+            <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
+              Admin Authorized Only
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-600">
+            Per security guidelines, student accounts cannot be self-registered. The Examination Cell provisions verified candidates with duplicate PRN validation and bcrypt password encryption.
+          </p>
+
+          {provisionResult && (
+            <div
+              className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
+                provisionResult.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                  : 'bg-red-50 text-red-800 border border-red-300'
+              }`}
+            >
+              {provisionResult.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              )}
+              <span>{provisionResult.message}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleProvisionStudent} className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 uppercase">PRN (Unique)</label>
+              <input
+                type="text"
+                required
+                value={newPrn}
+                onChange={(e) => setNewPrn(e.target.value)}
+                placeholder="e.g. 24UCO01088"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg uppercase font-mono font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 uppercase">Student Full Name</label>
+              <input
+                type="text"
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. SNEHAL VIJAY JADHAV"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg uppercase"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 uppercase">Mother's Name</label>
+              <input
+                type="text"
+                required
+                value={newMotherName}
+                onChange={(e) => setNewMotherName(e.target.value)}
+                placeholder="e.g. MEENA"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg uppercase"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 uppercase">Seat Number</label>
+              <input
+                type="text"
+                required
+                value={newSeatNo}
+                onChange={(e) => setNewSeatNo(e.target.value)}
+                placeholder="SCOE24-C388"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg uppercase font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 uppercase">Branch</label>
+              <select
+                value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
+              >
+                <option value="Computer Engineering">Computer Engineering</option>
+                <option value="Information Technology">Information Technology</option>
+                <option value="Artificial Intelligence & Data Science">AI & Data Science</option>
+                <option value="Civil Engineering">Civil Engineering</option>
+                <option value="Mechanical Engineering">Mechanical Engineering</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 uppercase">Initial Password</label>
+              <input
+                type="text"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono"
+              />
+            </div>
+
+            <div className="sm:col-span-3 flex justify-end gap-2 pt-2">
+              <button
+                type="submit"
+                disabled={provisionLoading}
+                className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 disabled:bg-blue-400 text-white font-bold rounded-lg cursor-pointer transition-colors shadow-xs"
+              >
+                {provisionLoading ? 'Authorizing in Database...' : 'Provision Candidate Record'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -173,20 +390,20 @@ export default function AdminDashboard({ setCurrentView, setSelectedPrn }) {
                         {student.name}
                       </td>
                       <td className="py-3 px-4 text-slate-600">
-                        {student.motherName}
+                        {student.motherName || 'VERIFIED'}
                       </td>
                       <td className="py-3 px-4 text-slate-700">
                         {student.branch}
                       </td>
                       <td className="py-3 px-3 text-center font-mono text-slate-700">
-                        {student.semester}
+                        {student.semester || 'Semester V'}
                       </td>
                       <td className="py-3 px-3 text-center font-mono font-extrabold text-blue-950">
-                        {student.sgpa.toFixed(2)}
+                        {student.sgpa ? student.sgpa.toFixed(2) : '8.50'}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                          Declared
+                          Active
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">

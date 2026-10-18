@@ -7,10 +7,19 @@ import StudentDashboard from './pages/StudentDashboard';
 import FacultyDashboard from './pages/FacultyDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import MarksheetPreview from './pages/MarksheetPreview';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-export default function App() {
+function MainApp() {
   const [currentView, setCurrentView] = useState('landing');
   const [selectedPrn, setSelectedPrn] = useState('22UCO01042');
+  const { user } = useAuth();
+
+  // If a student logs in, sync selectedPrn to their PRN
+  useEffect(() => {
+    if (user && user.role === 'Student' && user.prn) {
+      setSelectedPrn(user.prn);
+    }
+  }, [user]);
 
   // Scroll to top on page navigation
   useEffect(() => {
@@ -23,7 +32,6 @@ export default function App() {
       <Navbar 
         currentView={currentView} 
         setCurrentView={setCurrentView} 
-        currentRole={currentView}
       />
 
       {/* Main Routed Page Canvas */}
@@ -76,5 +84,13 @@ export default function App() {
       {/* Institutional Academic Footer */}
       <Footer setCurrentView={setCurrentView} />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }

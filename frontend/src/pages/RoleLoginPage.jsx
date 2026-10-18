@@ -4,41 +4,99 @@ import {
   UserCheck, 
   ShieldAlert, 
   ArrowRight, 
-  Info, 
   KeyRound, 
   User, 
-  Building, 
+  Eye, 
+  EyeOff, 
+  AlertCircle,
   CheckCircle,
-  HelpCircle
+  Lock,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
-import { COLLEGE_INFO, FICTIONAL_STUDENTS } from '../data/fictionalData';
+import { useAuth } from '../context/AuthContext';
 
 export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
   const [activeRole, setActiveRole] = useState('student'); // 'student' | 'faculty' | 'admin'
+  const { login, authError, setAuthError, isAuthenticated, user } = useAuth();
 
-  // Form states
+  // Student Form
   const [studentPrn, setStudentPrn] = useState('22UCO01042');
-  const [studentMotherName, setStudentMotherName] = useState('SUNITA');
-  const [facultyId, setFacultyId] = useState('FAC-CS-108');
-  const [facultyDept, setFacultyDept] = useState('Computer Engineering');
-  const [adminId, setAdminId] = useState('COE-ADMIN-01');
+  const [studentPassword, setStudentPassword] = useState('Student@123');
+  const [showStudentPass, setShowStudentPass] = useState(false);
 
-  const handleStudentSubmit = (e) => {
+  // Faculty Form
+  const [facultyIdentifier, setFacultyIdentifier] = useState('faculty.cs@sanjivani.edu.in');
+  const [facultyPassword, setFacultyPassword] = useState('Faculty@123');
+  const [showFacultyPass, setShowFacultyPass] = useState(false);
+
+  // Admin Form
+  const [adminIdentifier, setAdminIdentifier] = useState('admin@sanjivani.edu.in');
+  const [adminPassword, setAdminPassword] = useState('Admin@123');
+  const [showAdminPass, setShowAdminPass] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const handleStudentLogin = async (e) => {
     e.preventDefault();
-    if (studentPrn.trim()) {
-      setSelectedPrn(studentPrn.trim().toUpperCase());
+    setLoading(true);
+    setSuccessMsg('');
+
+    const res = await login({
+      prn: studentPrn.trim().toUpperCase(),
+      password: studentPassword,
+      role: 'Student',
+    });
+
+    setLoading(false);
+    if (res.success) {
+      setSuccessMsg(`Welcome, ${res.user.name}! Redirecting to student portal...`);
+      setSelectedPrn(res.user.prn || studentPrn.trim().toUpperCase());
+      setTimeout(() => {
+        setCurrentView('student');
+      }, 700);
     }
-    setCurrentView('student');
   };
 
-  const handleFacultySubmit = (e) => {
+  const handleFacultyLogin = async (e) => {
     e.preventDefault();
-    setCurrentView('faculty');
+    setLoading(true);
+    setSuccessMsg('');
+
+    const res = await login({
+      identifier: facultyIdentifier.trim(),
+      password: facultyPassword,
+      role: 'Faculty',
+    });
+
+    setLoading(false);
+    if (res.success) {
+      setSuccessMsg(`Welcome, ${res.user.name}! Redirecting to faculty portal...`);
+      setTimeout(() => {
+        setCurrentView('faculty');
+      }, 700);
+    }
   };
 
-  const handleAdminSubmit = (e) => {
+  const handleAdminLogin = async (e) => {
     e.preventDefault();
-    setCurrentView('admin');
+    setLoading(true);
+    setSuccessMsg('');
+
+    const res = await login({
+      identifier: adminIdentifier.trim(),
+      password: adminPassword,
+      role: 'Admin',
+    });
+
+    setLoading(false);
+    if (res.success) {
+      setSuccessMsg(`Welcome, ${res.user.name}! Redirecting to COE administration...`);
+      setTimeout(() => {
+        setCurrentView('admin');
+      }, 700);
+    }
   };
 
   return (
@@ -46,34 +104,48 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
       {/* Title & Guidance Header */}
       <div className="text-center mb-8 space-y-2">
         <span className="text-xs font-bold uppercase tracking-widest text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-          Official Portal Access
+          Secure Authentication • Stage 2
         </span>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-serif">
-          Sanjivani RMS Role Selection
+          Sanjivani RMS Portal Authentication
         </h1>
         <p className="text-sm text-slate-600 max-w-xl mx-auto">
-          Choose your designated academic role to access your dashboard, examination records, or grading portal.
+          Authenticate using your authorized institutional credentials. Sessions are securely governed by HTTP-only cookies and bcrypt-hashed records.
         </p>
       </div>
 
-      {/* Transparent Stage 1 Notice */}
-      <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 flex items-start gap-3">
-        <Info className="w-5 h-5 shrink-0 text-blue-700 mt-0.5" />
-        <div className="text-xs leading-relaxed">
-          <p className="font-semibold text-blue-950">
-            Stage 1 UI Foundation Notice (No Fake Authentication)
-          </p>
-          <p className="text-blue-800 mt-0.5">
-            Per development guidelines, fake authentication is not implemented. You can switch between roles or use the pre-filled sample values below to preview each portal dashboard directly.
-          </p>
+      {/* Success Notification */}
+      {successMsg && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span className="text-sm font-semibold">{successMsg}</span>
         </div>
-      </div>
+      )}
+
+      {/* Error Alert */}
+      {authError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-300 rounded-xl text-red-900 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+            <span>{authError}</span>
+          </div>
+          <button
+            onClick={() => setAuthError(null)}
+            className="text-xs text-red-700 underline font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Role Selection Tabs */}
       <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-3 gap-1 mb-8 shadow-inner">
         <button
           type="button"
-          onClick={() => setActiveRole('student')}
+          onClick={() => {
+            setActiveRole('student');
+            setAuthError(null);
+          }}
           className={`flex items-center justify-center gap-2 py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeRole === 'student'
               ? 'bg-white text-blue-900 shadow-sm border border-slate-200'
@@ -86,7 +158,10 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
 
         <button
           type="button"
-          onClick={() => setActiveRole('faculty')}
+          onClick={() => {
+            setActiveRole('faculty');
+            setAuthError(null);
+          }}
           className={`flex items-center justify-center gap-2 py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeRole === 'faculty'
               ? 'bg-white text-blue-900 shadow-sm border border-slate-200'
@@ -99,7 +174,10 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
 
         <button
           type="button"
-          onClick={() => setActiveRole('admin')}
+          onClick={() => {
+            setActiveRole('admin');
+            setAuthError(null);
+          }}
           className={`flex items-center justify-center gap-2 py-3 px-2 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeRole === 'admin'
               ? 'bg-white text-blue-900 shadow-sm border border-slate-200'
@@ -115,7 +193,7 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
       <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
         {/* STUDENT ROLE */}
         {activeRole === 'student' && (
-          <form onSubmit={handleStudentSubmit} className="space-y-6">
+          <form onSubmit={handleStudentLogin} className="space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-bold">
@@ -126,7 +204,7 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
                     Student Examination Access
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Enter your PRN and Registered Mother's Name as per examination records.
+                    Students log in using Permanent Registration Number (PRN) and account password.
                   </p>
                 </div>
               </div>
@@ -152,66 +230,64 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Mother's Name (As per Admission Record)
+                  Password
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
-                    type="text"
+                    type={showStudentPass ? 'text' : 'password'}
                     required
-                    value={studentMotherName}
-                    onChange={(e) => setStudentMotherName(e.target.value)}
-                    placeholder="e.g. SUNITA"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                    value={studentPassword}
+                    onChange={(e) => setStudentPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowStudentPass(!showStudentPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                  >
+                    {showStudentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Quick Sample Selector */}
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="text-slate-600 font-medium">Quick Sample Records:</span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStudentPrn('22UCO01042');
-                    setStudentMotherName('SUNITA');
-                  }}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-800 font-mono font-semibold rounded border border-slate-200 cursor-pointer"
-                >
-                  22UCO01042 (Computer)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStudentPrn('22UIT02015');
-                    setStudentMotherName('ANITA');
-                  }}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-800 font-mono font-semibold rounded border border-slate-200 cursor-pointer"
-                >
-                  22UIT02015 (IT)
-                </button>
+            {/* Pre-configured Authorized Credentials Card */}
+            <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <div className="flex items-center gap-1.5 font-bold text-blue-950 mb-0.5">
+                  <Sparkles className="w-4 h-4 text-blue-700" />
+                  <span>Authorized Test Student Credentials (Database Seeded)</span>
+                </div>
+                <p className="text-slate-600">
+                  PRN: <code className="font-bold text-blue-900 bg-white px-1.5 py-0.5 rounded border border-blue-200">22UCO01042</code> | Password: <code className="font-bold text-blue-900 bg-white px-1.5 py-0.5 rounded border border-blue-200">Student@123</code>
+                </p>
               </div>
-            </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedPrn(studentPrn);
-                  setCurrentView('marksheet');
+                  setStudentPrn('22UCO01042');
+                  setStudentPassword('Student@123');
                 }}
-                className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
+                className="px-3 py-1.5 bg-white hover:bg-blue-100 text-blue-900 font-bold rounded-lg border border-blue-300 transition-colors cursor-pointer shrink-0"
               >
-                Direct Preview Statement of Grades →
+                Auto-Fill Credentials
               </button>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-[11px] text-slate-500">
+                Self-registration is disabled for security. Accounts are provisioned by Examination Cell.
+              </span>
 
               <button
                 type="submit"
-                className="w-full sm:w-auto px-6 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-bold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                disabled={loading}
+                className="w-full sm:w-auto px-6 py-2.5 bg-blue-900 hover:bg-blue-800 disabled:bg-blue-400 text-white font-bold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
-                <span>Enter Student Portal</span>
+                <span>{loading ? 'Authenticating...' : 'Sign In as Student'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -220,7 +296,7 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
 
         {/* FACULTY ROLE */}
         {activeRole === 'faculty' && (
-          <form onSubmit={handleFacultySubmit} className="space-y-6">
+          <form onSubmit={handleFacultyLogin} className="space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold">
@@ -231,7 +307,7 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
                     Faculty Evaluation Desk
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Course In-Charge & Internal Examiner Portal
+                    Faculty log in using official college email or Employee ID and password.
                   </p>
                 </div>
               </div>
@@ -240,61 +316,86 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Faculty Employee ID
+                  Official Email or Employee ID
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     required
-                    value={facultyId}
-                    onChange={(e) => setFacultyId(e.target.value)}
-                    placeholder="FAC-CS-108"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    value={facultyIdentifier}
+                    onChange={(e) => setFacultyIdentifier(e.target.value)}
+                    placeholder="faculty.cs@sanjivani.edu.in"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Department
+                  Password
                 </label>
                 <div className="relative">
-                  <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <select
-                    value={facultyDept}
-                    onChange={(e) => setFacultyDept(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type={showFacultyPass ? 'text' : 'password'}
+                    required
+                    value={facultyPassword}
+                    onChange={(e) => setFacultyPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFacultyPass(!showFacultyPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
                   >
-                    <option value="Computer Engineering">Computer Engineering</option>
-                    <option value="Information Technology">Information Technology</option>
-                    <option value="Artificial Intelligence & Data Science">AI & Data Science</option>
-                    <option value="Civil Engineering">Civil Engineering</option>
-                    <option value="Mechanical Engineering">Mechanical Engineering</option>
-                  </select>
+                    {showFacultyPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div className="p-3 bg-indigo-50/70 rounded-lg border border-indigo-100 text-xs text-indigo-900">
-              <span className="font-semibold">Sample Instructor:</span> Prof. R. M. Kulkarni (CE501 - Database Management Systems & CE506 - DBMS Lab)
+            {/* Faculty Pre-configured Credentials */}
+            <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <div className="flex items-center gap-1.5 font-bold text-indigo-950 mb-0.5">
+                  <Sparkles className="w-4 h-4 text-indigo-700" />
+                  <span>Authorized Faculty Account (Database Seeded)</span>
+                </div>
+                <p className="text-slate-600">
+                  Email: <code className="font-bold text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">faculty.cs@sanjivani.edu.in</code> | Password: <code className="font-bold text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">Faculty@123</code>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFacultyIdentifier('faculty.cs@sanjivani.edu.in');
+                  setFacultyPassword('Faculty@123');
+                }}
+                className="px-3 py-1.5 bg-white hover:bg-indigo-100 text-indigo-900 font-bold rounded-lg border border-indigo-300 transition-colors cursor-pointer shrink-0"
+              >
+                Auto-Fill Credentials
+              </button>
             </div>
 
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                className="w-full sm:w-auto px-6 py-2.5 bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                disabled={loading}
+                className="w-full sm:w-auto px-6 py-2.5 bg-indigo-900 hover:bg-indigo-800 disabled:bg-indigo-400 text-white font-bold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
-                <span>Enter Faculty Portal</span>
+                <span>{loading ? 'Authenticating...' : 'Sign In as Faculty'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
         )}
 
-        {/* ADMIN / COE ROLE */}
+        {/* ADMIN ROLE */}
         {activeRole === 'admin' && (
-          <form onSubmit={handleAdminSubmit} className="space-y-6">
+          <form onSubmit={handleAdminLogin} className="space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center font-bold">
@@ -305,7 +406,7 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
                     Controller of Examinations (COE) Control Room
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Autonomous Section Administrative & Result Publication Terminal
+                    Administrator access to result publication and authorized account provisioning.
                   </p>
                 </div>
               </div>
@@ -314,47 +415,77 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  COE Officer ID
+                  Admin Email or Username
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     required
-                    value={adminId}
-                    onChange={(e) => setAdminId(e.target.value)}
-                    placeholder="COE-ADMIN-01"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    value={adminIdentifier}
+                    onChange={(e) => setAdminIdentifier(e.target.value)}
+                    placeholder="admin@sanjivani.edu.in"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-700"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Examination Authority Level
+                  Password
                 </label>
                 <div className="relative">
-                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
-                    type="text"
-                    readOnly
-                    value="Autonomous Examination Cell - Level 1"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600 font-medium cursor-not-allowed"
+                    type={showAdminPass ? 'text' : 'password'}
+                    required
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-700"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPass(!showAdminPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                  >
+                    {showAdminPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div className="p-3 bg-slate-100 rounded-lg border border-slate-200 text-xs text-slate-700">
-              <span className="font-semibold">Authority Scope:</span> Result publication, grade moderation audit, transcript generation, ordinances verification.
+            {/* Admin Pre-configured Credentials */}
+            <div className="bg-slate-100 p-4 rounded-xl border border-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <div className="flex items-center gap-1.5 font-bold text-slate-950 mb-0.5">
+                  <ShieldCheck className="w-4 h-4 text-slate-700" />
+                  <span>Authorized COE Admin Account (Database Seeded)</span>
+                </div>
+                <p className="text-slate-600">
+                  Email: <code className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-300">admin@sanjivani.edu.in</code> | Password: <code className="font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-300">Admin@123</code>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminIdentifier('admin@sanjivani.edu.in');
+                  setAdminPassword('Admin@123');
+                }}
+                className="px-3 py-1.5 bg-white hover:bg-slate-200 text-slate-900 font-bold rounded-lg border border-slate-300 transition-colors cursor-pointer shrink-0"
+              >
+                Auto-Fill Credentials
+              </button>
             </div>
 
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                className="w-full sm:w-auto px-6 py-2.5 bg-slate-900 hover:bg-black text-white font-bold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                disabled={loading}
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-900 hover:bg-black disabled:bg-slate-500 text-white font-bold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
-                <span>Enter COE Administration</span>
+                <span>{loading ? 'Authenticating...' : 'Sign In as COE Admin'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

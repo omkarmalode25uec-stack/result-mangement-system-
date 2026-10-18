@@ -1,10 +1,14 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import apiRouter from './routes/api.js';
+import authRouter from './routes/auth.js';
+import adminRouter from './routes/admin.js';
+import { seedDatabase } from './utils/seedData.js';
 
 // Resolve current directory for consistent .env resolution
 const __filename = fileURLToPath(import.meta.url);
@@ -16,16 +20,19 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB & Seed Database
+connectDB().then(() => {
+  seedDatabase();
+});
 
 // Middleware
 app.use(
   cors({
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
+    credentials: true, // Crucial for HTTP-only cookies
   })
 );
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -41,19 +48,41 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Sanjivani College of Engineering - Result Management System (RMS) API',
     institution: "Sanjivani Rural Education Society's Sanjivani College of Engineering, Kopargaon",
-    stage: 'Stage 1: Project Setup and UI Foundation',
+    stage: 'Stage 2: Authentication and Database',
     endpoints: {
-      health: '/api/health',
-      collegeInfo: '/api/info',
-      studentsList: '/api/students',
-      studentByPrn: '/api/students/:prn',
-      marksheetByPrn: '/api/marksheet/:prn (Sample PRNs: 22UCO01042, 22UIT02015)',
-      stats: '/api/stats',
+      auth: {
+        login: 'POST /api/auth/login',
+        logout: 'POST /api/auth/logout',
+        me: 'GET /api/auth/me',
+        register: 'POST /api/auth/register (restricted)',
+      },
+      admin: {
+        provisionStudent: 'POST /api/admin/provision/student (Admin only)',
+        provisionFaculty: 'POST /api/admin/provision/faculty (Admin only)',
+        provisionAdmin: 'POST /api/admin/provision/admin (Admin only)',
+        listUsers: 'GET /api/admin/users (Admin only)',
+      },
+      public: {
+        health: '/api/health',
+        collegeInfo: '/api/info',
+        publicPreview: '/api/public-preview/:prn',
+        stats: '/api/stats',
+      },
+      protected: {
+        studentsList: 'GET /api/students',
+        studentByPrn: 'GET /api/students/:prn',
+        marksheetByPrn: 'GET /api/marksheet/:prn',
+        marksheetMe: 'GET /api/marksheet-me',
+        subjects: 'GET /api/subjects',
+        sessions: 'GET /api/sessions',
+      },
     },
   });
 });
 
-// API Routes
+// Mount Routes
+app.use('/api/auth', authRouter);
+app.use('/api/admin', adminRouter);
 app.use('/api', apiRouter);
 
 // 404 Handler
@@ -78,6 +107,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`====================================================`);
   console.log(`Sanjivani College of Engineering - RMS Backend API`);
+  console.log(`Stage 2: Authentication & Database active`);
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode`);
   console.log(`Listening on: http://localhost:${PORT}`);
   console.log(`API Health:   http://localhost:${PORT}/api/health`);

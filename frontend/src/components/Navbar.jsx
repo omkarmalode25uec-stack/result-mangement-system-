@@ -6,19 +6,22 @@ import {
   FileText, 
   UserCheck, 
   ShieldAlert, 
-  Layers, 
   Home, 
   LogIn,
-  ChevronDown
+  LogOut,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 import { COLLEGE_INFO } from '../data/fictionalData';
+import { useAuth } from '../context/AuthContext';
 
-export default function Navbar({ currentView, setCurrentView, currentRole, setCurrentRole }) {
+export default function Navbar({ currentView, setCurrentView }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
 
   const navLinks = [
     { id: 'landing', label: 'Home', icon: Home },
-    { id: 'login', label: 'Portal Access', icon: LogIn },
+    { id: 'login', label: isAuthenticated ? 'Switch Role' : 'Portal Access', icon: LogIn },
     { id: 'student', label: 'Student Portal', icon: GraduationCap },
     { id: 'faculty', label: 'Faculty Portal', icon: UserCheck },
     { id: 'admin', label: 'COE / Admin', icon: ShieldAlert },
@@ -27,6 +30,12 @@ export default function Navbar({ currentView, setCurrentView, currentRole, setCu
 
   const handleNavClick = (viewId) => {
     setCurrentView(viewId);
+    setMobileMenuOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setCurrentView('landing');
     setMobileMenuOpen(false);
   };
 
@@ -63,7 +72,6 @@ export default function Navbar({ currentView, setCurrentView, currentRole, setCu
             onClick={() => handleNavClick('landing')}
             className="flex items-center gap-3 cursor-pointer group"
           >
-            {/* Visual Logo Placeholder */}
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-700 text-white flex items-center justify-center font-bold text-lg shadow-md group-hover:bg-blue-800 transition-colors">
               <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
@@ -73,7 +81,7 @@ export default function Navbar({ currentView, setCurrentView, currentRole, setCu
                   SANJIVANI COE
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                  RMS Portal
+                  RMS
                 </span>
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
@@ -107,16 +115,40 @@ export default function Navbar({ currentView, setCurrentView, currentRole, setCu
             })}
           </nav>
 
-          {/* Quick Role Switcher / Indicator */}
-          <div className="hidden sm:flex items-center gap-2">
-            <div className="text-right">
-              <span className="text-[11px] uppercase font-bold text-slate-400 block tracking-wider">
-                Current Mode
-              </span>
-              <span className="text-xs font-bold text-blue-900 capitalize bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                {currentView === 'marksheet' ? 'Statement Preview' : `${currentView} View`}
-              </span>
-            </div>
+          {/* User Auth Status / Logout Button */}
+          <div className="hidden sm:flex items-center gap-3">
+            {isAuthenticated && user ? (
+              <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
+                <div className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <span className="text-xs font-bold text-slate-900 line-clamp-1 max-w-[130px]">
+                      {user.name}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
+                      {user.role}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono block">
+                    {user.prn || user.employeeId || user.username}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Log Out"
+                  className="p-2 text-slate-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border border-slate-200"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleNavClick('login')}
+                className="flex items-center gap-2 px-3.5 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Log In</span>
+              </button>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -135,6 +167,22 @@ export default function Navbar({ currentView, setCurrentView, currentRole, setCu
       {/* Mobile Dropdown Navigation */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-4 space-y-1 shadow-lg">
+          {isAuthenticated && user && (
+            <div className="p-3 bg-blue-50 rounded-lg mb-2 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-blue-950 block">{user.name}</span>
+                <span className="text-[11px] text-blue-700 font-medium">Role: {user.role}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="text-xs font-bold text-red-600 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
+
           <div className="text-xs font-bold uppercase tracking-wider text-slate-400 px-3 pb-1">
             Navigation Menu
           </div>
