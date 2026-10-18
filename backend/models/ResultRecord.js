@@ -116,7 +116,7 @@ const resultRecordSchema = new mongoose.Schema(
     semesterLabel: {
       type: String,
       default: function () {
-        return `Semester ${this.semester}`;
+        return `Semester ${this?.semester || 5}`;
       },
     },
     examinationName: {

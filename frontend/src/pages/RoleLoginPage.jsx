@@ -26,7 +26,7 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
   const [showStudentPass, setShowStudentPass] = useState(false);
 
   // Faculty Form
-  const [facultyIdentifier, setFacultyIdentifier] = useState('faculty.cs@sanjivani.edu.in');
+  const [facultyIdentifier, setFacultyIdentifier] = useState('ndkapale@sanjivani.edu.in');
   const [facultyPassword, setFacultyPassword] = useState('Faculty@123');
   const [showFacultyPass, setShowFacultyPass] = useState(false);
 
@@ -361,17 +361,17 @@ export default function RoleLoginPage({ setCurrentView, setSelectedPrn }) {
               <div>
                 <div className="flex items-center gap-1.5 font-bold text-indigo-950 mb-0.5">
                   <Sparkles className="w-4 h-4 text-indigo-700" />
-                  <span>Authorized Faculty Account (Database Seeded)</span>
+                  <span>Authorized Faculty: Prof. N. D. Kapale (Software Engineering, Modeling & Design)</span>
                 </div>
                 <p className="text-slate-600">
-                  Email: <code className="font-bold text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">faculty.cs@sanjivani.edu.in</code> | Password: <code className="font-bold text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">Faculty@123</code>
+                  Email / ID: <code className="font-bold text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">ndkapale@sanjivani.edu.in</code> | Password: <code className="font-bold text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">Faculty@123</code>
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={() => {
-                  setFacultyIdentifier('faculty.cs@sanjivani.edu.in');
+                  setFacultyIdentifier('ndkapale@sanjivani.edu.in');
                   setFacultyPassword('Faculty@123');
                 }}
                 className="px-3 py-1.5 bg-white hover:bg-indigo-100 text-indigo-900 font-bold rounded-lg border border-indigo-300 transition-colors cursor-pointer shrink-0"
