@@ -69,10 +69,10 @@ export const sampleMarksheets = {
     motherName: "SUNITA",
     branch: "Computer Engineering",
     degree: "Bachelor of Technology (B.Tech)",
-    academicYear: "2024-2025",
-    semester: "Semester V",
-    examination: "Winter Session 2024 Autonomous Examination",
-    resultDate: "12-01-2025",
+    academicYear: "2026-27",
+    semester: "Semester I",
+    examination: "Winter Session 2026 Autonomous Examination",
+    resultDate: "12-01-2027",
     subjects: [
       {
         courseCode: "EC301",

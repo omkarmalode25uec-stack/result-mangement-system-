@@ -11,6 +11,39 @@ import { generateStatementOfGradesPDF } from '../services/pdfService.js';
 
 const router = express.Router();
 
+// Helper functions for parameter normalization
+function parseSemesterNumber(sem) {
+  if (typeof sem === 'number') return sem;
+  if (!sem) return null;
+  const str = String(sem).trim();
+  const matchNum = str.match(/\b([1-8])\b/);
+  if (matchNum) return parseInt(matchNum[1], 10);
+  const romanMap = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8 };
+  const matchRoman = str.toLowerCase().match(/\b(viii|vii|vi|v|iv|iii|ii|i)\b/);
+  if (matchRoman) return romanMap[matchRoman[1]];
+  return null;
+}
+
+function buildAcademicYearQuery(yr) {
+  if (!yr) return null;
+  const clean = String(yr).trim();
+  const norm = clean.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, '-').trim();
+  const variants = [clean, norm];
+  if (norm.includes('-')) {
+    const parts = norm.split('-');
+    if (parts[0].length === 4 && parts[1].length === 2) {
+      variants.push(`${parts[0]}-20${parts[1]}`);
+      variants.push(`${parts[0]}–${parts[1]}`);
+      variants.push(`${parts[0]}–20${parts[1]}`);
+    } else if (parts[0].length === 4 && parts[1].length === 4) {
+      variants.push(`${parts[0]}-${parts[1].slice(2)}`);
+      variants.push(`${parts[0]}–${parts[1].slice(2)}`);
+      variants.push(`${parts[0]}–${parts[1]}`);
+    }
+  }
+  return { $in: Array.from(new Set(variants)) };
+}
+
 // 1. Health Check (Public & Production-Ready)
 router.get('/health', (req, res) => {
   const dbConnected = mongoose.connection.readyState === 1;
@@ -185,12 +218,17 @@ router.get(
   enforceStudentRecordAccess,
   async (req, res) => {
     try {
-      const prn = req.params.prn.toUpperCase();
+      const prn = (req.user.role === 'Student' && req.user.prn)
+        ? req.user.prn.toUpperCase()
+        : req.params.prn.toUpperCase();
       const { academicYear, semester } = req.query;
 
       const query = { prn };
-      if (academicYear) query.academicYear = academicYear.trim();
-      if (semester) query.semester = Number(semester);
+      if (academicYear) query.academicYear = buildAcademicYearQuery(academicYear);
+      if (semester !== undefined && semester !== null && semester !== '') {
+        const parsedSem = parseSemesterNumber(semester);
+        if (parsedSem) query.semester = parsedSem;
+      }
 
       let marksheet = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
 
@@ -246,8 +284,11 @@ router.get('/marksheet-me', authenticate, async (req, res) => {
     const { academicYear, semester } = req.query;
 
     const query = { prn };
-    if (academicYear) query.academicYear = academicYear.trim();
-    if (semester) query.semester = Number(semester);
+    if (academicYear) query.academicYear = buildAcademicYearQuery(academicYear);
+    if (semester !== undefined && semester !== null && semester !== '') {
+      const parsedSem = parseSemesterNumber(semester);
+      if (parsedSem) query.semester = parsedSem;
+    }
 
     let marksheet = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
 
@@ -282,7 +323,9 @@ router.get('/marksheet-me', authenticate, async (req, res) => {
 // 10. Student Academic Terms & Semester Progression Route
 router.get('/student/terms', authenticate, enforceStudentRecordAccess, async (req, res) => {
   try {
-    let prn = (req.query.prn || req.user.prn || '22UCO01042').trim().toUpperCase();
+    let prn = (req.user.role === 'Student' && req.user.prn)
+      ? req.user.prn.trim().toUpperCase()
+      : (req.query.prn || req.user.prn || '22UCO01042').trim().toUpperCase();
 
     const student = await StudentProfile.findOne({ prn }).lean();
     const currentSem = student ? student.currentSemester : 5;
@@ -369,19 +412,25 @@ router.get('/student/terms', authenticate, enforceStudentRecordAccess, async (re
 // 11. Student Specific Term Result (Protected & Enforced)
 router.get('/student/result', authenticate, enforceStudentRecordAccess, async (req, res) => {
   try {
-    let prn = (req.query.prn || req.user.prn || '22UCO01042').trim().toUpperCase();
+    // Invariant: Never trust a PRN supplied by frontend to determine which student's result to return
+    let prn = (req.user.role === 'Student' && req.user.prn)
+      ? req.user.prn.trim().toUpperCase()
+      : (req.query.prn || req.user.prn || '22UCO01042').trim().toUpperCase();
 
     const { academicYear, semester } = req.query;
     const query = { prn };
-    if (academicYear) query.academicYear = academicYear.trim();
-    if (semester) query.semester = Number(semester);
+    if (academicYear) query.academicYear = buildAcademicYearQuery(academicYear);
+    if (semester !== undefined && semester !== null && semester !== '') {
+      const parsedSem = parseSemesterNumber(semester);
+      if (parsedSem) query.semester = parsedSem;
+    }
 
     const record = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
 
     if (!record) {
       return res.status(404).json({
         success: false,
-        message: `No result record found for PRN ${prn} in the specified term.`,
+        message: `No published result record found for PRN ${prn} in ${academicYear || 'selected year'}, ${semester || 'selected semester'}.`,
       });
     }
 
@@ -389,7 +438,7 @@ router.get('/student/result', authenticate, enforceStudentRecordAccess, async (r
     if (req.user.role === 'Student' && !record.isPublished) {
       return res.status(403).json({
         success: false,
-        message: `Examination results for Semester ${record.semester} (${record.academicYear}) are currently under moderation/review and have not been published yet.`,
+        message: `Examination results for ${record.semesterLabel || `Semester ${record.semester}`} (${record.academicYear}) are currently under moderation/review and have not been published yet.`,
         reviewStatus: record.reviewStatus || 'Draft',
         isPublished: false,
       });
@@ -413,19 +462,24 @@ router.get(
   enforceStudentRecordAccess,
   async (req, res) => {
     try {
-      const prn = req.params.prn.toUpperCase();
+      const prn = (req.user.role === 'Student' && req.user.prn)
+        ? req.user.prn.toUpperCase()
+        : req.params.prn.toUpperCase();
       const { academicYear, semester } = req.query;
 
       const query = { prn };
-      if (academicYear) query.academicYear = academicYear.trim();
-      if (semester) query.semester = Number(semester);
+      if (academicYear) query.academicYear = buildAcademicYearQuery(academicYear);
+      if (semester !== undefined && semester !== null && semester !== '') {
+        const parsedSem = parseSemesterNumber(semester);
+        if (parsedSem) query.semester = parsedSem;
+      }
 
       const record = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
 
       if (!record) {
         return res.status(404).json({
           success: false,
-          message: `No Statement of Grades found for PRN: ${prn}.`,
+          message: `No Statement of Grades found for PRN: ${prn} (${academicYear || 'all sessions'}, Semester ${semester || 'any'}).`,
         });
       }
 
@@ -448,7 +502,7 @@ router.get(
         college: collegeInfo,
       });
 
-      const semNum = record.semester || 5;
+      const semNum = record.semester || 1;
       const filename = `Statement_of_Grades_${prn}_Sem${semNum}.pdf`;
 
       res.setHeader('Content-Type', 'application/pdf');
@@ -475,8 +529,11 @@ router.get('/marksheet-me/pdf', authenticate, async (req, res) => {
     const { academicYear, semester } = req.query;
 
     const query = { prn };
-    if (academicYear) query.academicYear = academicYear.trim();
-    if (semester) query.semester = Number(semester);
+    if (academicYear) query.academicYear = buildAcademicYearQuery(academicYear);
+    if (semester !== undefined && semester !== null && semester !== '') {
+      const parsedSem = parseSemesterNumber(semester);
+      if (parsedSem) query.semester = parsedSem;
+    }
 
     const record = await ResultRecord.findOne(query).sort({ semester: -1, createdAt: -1 }).lean();
 
@@ -505,7 +562,7 @@ router.get('/marksheet-me/pdf', authenticate, async (req, res) => {
       college: collegeInfo,
     });
 
-    const semNum = record.semester || 5;
+    const semNum = record.semester || 1;
     const filename = `Statement_of_Grades_${prn}_Sem${semNum}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');

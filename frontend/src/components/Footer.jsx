@@ -1,8 +1,11 @@
 import React from 'react';
-import { ShieldCheck, Mail, Phone, MapPin, ExternalLink } from 'lucide-react';
+import { ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
 import { COLLEGE_INFO } from '../data/fictionalData';
+import { useAuth } from '../context/AuthContext';
 
 export default function Footer({ setCurrentView }) {
+  const { user, isAuthenticated } = useAuth();
+
   return (
     <footer className="bg-slate-900 text-slate-300 border-t border-slate-800 no-print mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -26,17 +29,12 @@ export default function Footer({ setCurrentView }) {
               <ShieldCheck className="w-4 h-4 shrink-0 text-blue-400" />
               <span>{COLLEGE_INFO.accreditation}</span>
             </div>
-            <div className="p-3 bg-slate-800/80 rounded-lg border border-slate-700/60 mt-3">
-              <p className="text-[11px] text-amber-300 font-medium">
-                Stage 1 Learning Project: Result Management System (RMS) UI Foundation with React, Vite, Tailwind CSS, Express, and Mongoose.
-              </p>
-            </div>
           </div>
 
-          {/* Col 2: Portal Navigation */}
+          {/* Col 2: Navigation Links (Authorized for Current User Role) */}
           <div>
             <h4 className="text-white text-xs font-bold uppercase tracking-wider mb-3">
-              Portal Portals
+              Quick Navigation
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
@@ -44,49 +42,53 @@ export default function Footer({ setCurrentView }) {
                   onClick={() => setCurrentView('landing')}
                   className="hover:text-white transition-colors cursor-pointer text-left"
                 >
-                  RMS Home / Announcements
+                  RMS Home
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={() => setCurrentView('login')}
-                  className="hover:text-white transition-colors cursor-pointer text-left"
-                >
-                  Role-Based Portal Access
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => setCurrentView('student')}
-                  className="hover:text-white transition-colors cursor-pointer text-left"
-                >
-                  Student Result Dashboard
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => setCurrentView('faculty')}
-                  className="hover:text-white transition-colors cursor-pointer text-left"
-                >
-                  Faculty Grade Evaluation
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => setCurrentView('admin')}
-                  className="hover:text-white transition-colors cursor-pointer text-left"
-                >
-                  Examination Cell / COE Admin
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => setCurrentView('marksheet')}
-                  className="hover:text-amber-400 text-amber-300 font-semibold transition-colors cursor-pointer text-left"
-                >
-                  Statement of Grades Preview
-                </button>
-              </li>
+
+              {!isAuthenticated && (
+                <li>
+                  <button
+                    onClick={() => setCurrentView('login')}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    Student Login
+                  </button>
+                </li>
+              )}
+
+              {isAuthenticated && user?.role === 'Student' && (
+                <li>
+                  <button
+                    onClick={() => setCurrentView('student')}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    Student Dashboard
+                  </button>
+                </li>
+              )}
+
+              {isAuthenticated && user?.role === 'Faculty' && (
+                <li>
+                  <button
+                    onClick={() => setCurrentView('faculty')}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    Faculty Dashboard
+                  </button>
+                </li>
+              )}
+
+              {isAuthenticated && user?.role === 'Admin' && (
+                <li>
+                  <button
+                    onClick={() => setCurrentView('admin')}
+                    className="hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    COE / Admin Dashboard
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 
@@ -118,7 +120,7 @@ export default function Footer({ setCurrentView }) {
         <div className="border-t border-slate-800 mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
           <p>© {new Date().getFullYear()} Sanjivani College of Engineering, Kopargaon. All rights reserved.</p>
           <p className="text-[11px] text-slate-400">
-            Fictional educational sample data & layout preview.
+            Autonomous Examination Division • Savitribai Phule Pune University
           </p>
         </div>
       </div>

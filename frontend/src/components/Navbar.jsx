@@ -19,14 +19,40 @@ export default function Navbar({ currentView, setCurrentView }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
 
-  const navLinks = [
-    { id: 'landing', label: 'Home', icon: Home },
-    { id: 'login', label: isAuthenticated ? 'Switch Role' : 'Portal Access', icon: LogIn },
-    { id: 'student', label: 'Student Portal', icon: GraduationCap },
-    { id: 'faculty', label: 'Faculty Portal', icon: UserCheck },
-    { id: 'admin', label: 'COE / Admin', icon: ShieldAlert },
-    { id: 'marksheet', label: 'Marksheet Preview', icon: FileText, highlight: true },
-  ];
+  // Role-based navigation links: Users see only pages authorized for their role
+  const getNavLinks = () => {
+    if (!isAuthenticated || !user) {
+      return [
+        { id: 'landing', label: 'Home', icon: Home },
+        { id: 'login', label: 'Student Login', icon: LogIn },
+      ];
+    }
+
+    if (user.role === 'Student') {
+      return [
+        { id: 'landing', label: 'Home', icon: Home },
+        { id: 'student', label: 'Student Dashboard', icon: GraduationCap },
+      ];
+    }
+
+    if (user.role === 'Faculty') {
+      return [
+        { id: 'landing', label: 'Home', icon: Home },
+        { id: 'faculty', label: 'Faculty Dashboard', icon: UserCheck },
+      ];
+    }
+
+    if (user.role === 'Admin') {
+      return [
+        { id: 'landing', label: 'Home', icon: Home },
+        { id: 'admin', label: 'COE / Admin Dashboard', icon: ShieldAlert },
+      ];
+    }
+
+    return [{ id: 'landing', label: 'Home', icon: Home }];
+  };
+
+  const navLinks = getNavLinks();
 
   const handleNavClick = (viewId) => {
     setCurrentView(viewId);
@@ -55,7 +81,7 @@ export default function Navbar({ currentView, setCurrentView }) {
           </div>
           <div className="flex items-center gap-4 text-[11px]">
             <span className="bg-blue-800/80 text-blue-100 px-2 py-0.5 rounded font-mono">
-              Academic Session: 2024-2025
+              Academic Session: 2026–27
             </span>
             <span className="hidden sm:inline text-blue-200">
               Exam Cell: examcell@sanjivani.edu.in
@@ -94,21 +120,19 @@ export default function Navbar({ currentView, setCurrentView }) {
           <nav className="hidden lg:flex items-center space-x-1">
             {navLinks.map((link) => {
               const Icon = link.icon;
-              const isActive = currentView === link.id;
+              const isActive = currentView === link.id || (link.id === 'login' && currentView.startsWith('login'));
 
               return (
                 <button
                   key={link.id}
                   onClick={() => handleNavClick(link.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                     isActive
                       ? 'bg-blue-900 text-white shadow-xs'
-                      : link.highlight
-                      ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
                       : 'text-slate-700 hover:text-blue-900 hover:bg-slate-100'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : link.highlight ? 'text-blue-700' : 'text-slate-500'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                   {link.label}
                 </button>
               );
@@ -121,7 +145,7 @@ export default function Navbar({ currentView, setCurrentView }) {
               <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
                 <div className="text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    <span className="text-xs font-bold text-slate-900 line-clamp-1 max-w-[130px]">
+                    <span className="text-xs font-bold text-slate-900 line-clamp-1 max-w-[140px]">
                       {user.name}
                     </span>
                     <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
@@ -143,10 +167,10 @@ export default function Navbar({ currentView, setCurrentView }) {
             ) : (
               <button
                 onClick={() => handleNavClick('login')}
-                className="flex items-center gap-2 px-3.5 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Log In</span>
+                <span>Student Login</span>
               </button>
             )}
           </div>
@@ -188,7 +212,7 @@ export default function Navbar({ currentView, setCurrentView }) {
           </div>
           {navLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = currentView === link.id;
+            const isActive = currentView === link.id || (link.id === 'login' && currentView.startsWith('login'));
 
             return (
               <button
@@ -204,11 +228,6 @@ export default function Navbar({ currentView, setCurrentView }) {
                   <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                   <span>{link.label}</span>
                 </div>
-                {link.highlight && (
-                  <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">
-                    Official Format
-                  </span>
-                )}
               </button>
             );
           })}
