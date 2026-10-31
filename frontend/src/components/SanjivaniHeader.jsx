@@ -2,7 +2,7 @@ import React from 'react';
 import { Award, ShieldCheck } from 'lucide-react';
 import { COLLEGE_INFO } from '../data/fictionalData';
 
-export default function SanjivaniHeader({ showWatermark = false }) {
+export default function SanjivaniHeader({ showWatermark = false, examinationSession }) {
   return (
     <div className="relative border-b-2 border-slate-900 pb-4 text-center">
       {/* Visual Logo / Seal Placeholder */}
@@ -46,11 +46,18 @@ export default function SanjivaniHeader({ showWatermark = false }) {
       </div>
 
       {/* Official Marksheet Banner Title */}
-      <div className="mt-2 py-1.5 px-4 bg-blue-950 text-white rounded-sm">
+      <div className="mt-2 py-1.5 px-4 bg-blue-950 text-white rounded-xs">
         <h2 className="text-base sm:text-lg md:text-xl font-bold tracking-wider font-serif uppercase">
           STATEMENT OF GRADES
         </h2>
       </div>
+
+      {/* Examination Session Subtitle */}
+      {examinationSession && (
+        <div className="mt-1.5 text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-wide">
+          {examinationSession}
+        </div>
+      )}
     </div>
   );
 }

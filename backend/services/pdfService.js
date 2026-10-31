@@ -261,14 +261,15 @@ export function generateStatementOfGradesPDF({ result, student, college = colleg
       // --------------------------------------------------------------------------
       // Column Widths (Total: 545.28 pt)
       const cols = [
-        { key: 'code', label: 'Course Code', width: 62, align: 'center' },
-        { key: 'title', label: 'Course Title', width: 228, align: 'left' },
+        { key: 'sr', label: 'Sr. No.', width: 28, align: 'center' },
+        { key: 'code', label: 'Course Code', width: 58, align: 'center' },
+        { key: 'title', label: 'Course Title', width: 204, align: 'left' },
         { key: 'type', label: 'Type', width: 34, align: 'center' },
         { key: 'cr', label: 'CR', width: 32, align: 'center' },
         { key: 'ec', label: 'EC', width: 32, align: 'center' },
-        { key: 'grade', label: 'Grade', width: 38, align: 'center' },
+        { key: 'grade', label: 'Grade', width: 36, align: 'center' },
         { key: 'gp', label: 'Grade Point', width: 55, align: 'center' },
-        { key: 'cp', label: 'Credit Points', width: 64.28, align: 'center' },
+        { key: 'cp', label: 'Credit Points', width: 66.28, align: 'center' },
       ];
 
       // Table Header Row
@@ -310,45 +311,53 @@ export function generateStatementOfGradesPDF({ result, student, college = colleg
 
         let rowX = tableX;
 
-        // 1. Course Code
-        doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#1e3a8a');
-        doc.text(sub.courseCode || '', rowX, y + 4.5, {
+        // 0. Sr. No.
+        doc.fontSize(7).font('Helvetica').fillColor('#475569');
+        doc.text(String(index + 1), rowX, y + 4.5, {
           width: cols[0].width,
           align: cols[0].align,
         });
         rowX += cols[0].width;
 
+        // 1. Course Code
+        doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#1e3a8a');
+        doc.text(sub.courseCode || '', rowX, y + 4.5, {
+          width: cols[1].width,
+          align: cols[1].align,
+        });
+        rowX += cols[1].width;
+
         // 2. Course Title
         doc.font('Helvetica').fillColor('#0f172a');
         doc.text(sub.courseTitle || '', rowX + 4, y + 4.5, {
-          width: cols[1].width - 8,
-          align: cols[1].align,
+          width: cols[2].width - 8,
+          align: cols[2].align,
           ellipsis: true,
         });
-        rowX += cols[1].width;
+        rowX += cols[2].width;
 
         // 3. Course Type
         doc.font('Helvetica-Bold').fillColor('#475569');
         doc.text(sub.courseType || 'TH', rowX, y + 4.5, {
-          width: cols[2].width,
-          align: cols[2].align,
-        });
-        rowX += cols[2].width;
-
-        // 4. Credits Registered (CR)
-        doc.font('Helvetica').fillColor('#1e293b');
-        doc.text(String(sub.credits ?? 0), rowX, y + 4.5, {
           width: cols[3].width,
           align: cols[3].align,
         });
         rowX += cols[3].width;
 
-        // 5. Credits Earned (EC)
-        doc.text(String(sub.earnedCredits ?? 0), rowX, y + 4.5, {
+        // 4. Credits Registered (CR)
+        doc.font('Helvetica').fillColor('#1e293b');
+        doc.text(String(sub.credits ?? 0), rowX, y + 4.5, {
           width: cols[4].width,
           align: cols[4].align,
         });
         rowX += cols[4].width;
+
+        // 5. Credits Earned (EC)
+        doc.text(String(sub.earnedCredits ?? 0), rowX, y + 4.5, {
+          width: cols[5].width,
+          align: cols[5].align,
+        });
+        rowX += cols[5].width;
 
         // 6. Letter Grade
         const grade = sub.grade || 'F';
@@ -359,25 +368,25 @@ export function generateStatementOfGradesPDF({ result, student, college = colleg
 
         doc.font('Helvetica-Bold').fillColor(gradeColor);
         doc.text(grade, rowX, y + 4.5, {
-          width: cols[5].width,
-          align: cols[5].align,
-        });
-        rowX += cols[5].width;
-
-        // 7. Grade Point (GP)
-        doc.font('Helvetica-Bold').fillColor('#334155');
-        doc.text(String(sub.gradePoints ?? sub.gradePoint ?? 0), rowX, y + 4.5, {
           width: cols[6].width,
           align: cols[6].align,
         });
         rowX += cols[6].width;
 
+        // 7. Grade Point (GP)
+        doc.font('Helvetica-Bold').fillColor('#334155');
+        doc.text(String(sub.gradePoints ?? sub.gradePoint ?? 0), rowX, y + 4.5, {
+          width: cols[7].width,
+          align: cols[7].align,
+        });
+        rowX += cols[7].width;
+
         // 8. Credit Points (CP = CR * GP)
         const cp = sub.creditPoints ?? (Number(sub.credits || 0) * Number(sub.gradePoints || 0));
         doc.font('Helvetica-Bold').fillColor('#0f172a');
         doc.text(String(cp), rowX, y + 4.5, {
-          width: cols[7].width,
-          align: cols[7].align,
+          width: cols[8].width,
+          align: cols[8].align,
         });
 
         // Vertical column grid lines
@@ -403,32 +412,33 @@ export function generateStatementOfGradesPDF({ result, student, college = colleg
         .fillAndStroke('#e2e8f0', '#94a3b8')
         .restore();
 
+      const spanWidth = cols[0].width + cols[1].width + cols[2].width + cols[3].width;
       doc.fontSize(8).font('Helvetica-Bold').fillColor('#0f172a');
       doc.text('TOTAL / SEMESTER SUMMARY', tableX + 8, y + 5, {
-        width: cols[0].width + cols[1].width + cols[2].width - 16,
+        width: spanWidth - 16,
         align: 'left',
       });
 
       // Total CR
-      const crX = tableX + cols[0].width + cols[1].width + cols[2].width;
+      const crX = tableX + spanWidth;
       doc.text(String(result.totalCR || 0), crX, y + 5, {
-        width: cols[3].width,
-        align: 'center',
-      });
-
-      // Total EC
-      const ecX = crX + cols[3].width;
-      doc.text(String(result.totalEC || 0), ecX, y + 5, {
         width: cols[4].width,
         align: 'center',
       });
 
-      // Skip Grade column
-      // Skip GP column
-      // Total CP (Grade Points Sum)
-      const cpX = ecX + cols[4].width + cols[5].width + cols[6].width;
+      // Total EC
+      const ecX = crX + cols[4].width;
+      doc.text(String(result.totalEC || 0), ecX, y + 5, {
+        width: cols[5].width,
+        align: 'center',
+      });
+
+      // Skip Grade column (cols[6])
+      // Skip GP column (cols[7])
+      // Total CP (Grade Points Sum) under Credit Points column (cols[8])
+      const cpX = ecX + cols[5].width + cols[6].width + cols[7].width;
       doc.fillColor('#1e3a8a').text(String(result.totalGP || 0), cpX, y + 5, {
-        width: cols[7].width,
+        width: cols[8].width,
         align: 'center',
       });
 
