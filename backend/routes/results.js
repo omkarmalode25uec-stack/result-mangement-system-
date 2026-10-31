@@ -288,10 +288,15 @@ router.post('/results/calculate-semester', async (req, res) => {
 
     if (department && department !== 'ALL') {
       const deptKeyword = department.replace(/^Department\s+of\s+/i, '').trim();
-      studentFilter.$or = [
-        { branch: { $regex: new RegExp(deptKeyword, 'i') } },
-        { department: { $regex: new RegExp(deptKeyword, 'i') } },
-      ];
+      const matchTerms = [deptKeyword];
+      if (/computer/i.test(deptKeyword)) {
+        matchTerms.push('Computer');
+        matchTerms.push('Electronics and Computer Engineering');
+      }
+      studentFilter.$or = matchTerms.flatMap((t) => [
+        { branch: { $regex: new RegExp(t, 'i') } },
+        { department: { $regex: new RegExp(t, 'i') } },
+      ]);
     }
 
     if (division && division !== 'ALL') {
@@ -465,9 +470,13 @@ router.post('/results/recalculate/:prn', async (req, res) => {
 
     // Find courses for this student's semester & department
     const deptKeyword = student.branch.replace(/^Department\s+of\s+/i, '').trim();
+    const deptTerms = [deptKeyword];
+    if (/computer/i.test(deptKeyword)) deptTerms.push('Computer Engineering');
+    if (/electronics/i.test(deptKeyword)) deptTerms.push('Electronics');
+
     const subjects = await Subject.find({
       semester: numSem,
-      department: { $regex: new RegExp(deptKeyword, 'i') },
+      $or: deptTerms.map((t) => ({ department: { $regex: new RegExp(t, 'i') } })),
     }).lean();
 
     if (subjects.length === 0) {
@@ -902,7 +911,9 @@ router.post('/results/batches/approve', async (req, res) => {
     const query = { academicYear: cleanYear, semester: numSem };
     if (branch && branch !== 'ALL') {
       const deptKeyword = branch.replace(/^Department\s+of\s+/i, '').trim();
-      query.branch = { $regex: new RegExp(deptKeyword, 'i') };
+      const terms = [deptKeyword];
+      if (/computer/i.test(deptKeyword)) terms.push('Computer');
+      query.branch = { $in: terms.map((t) => new RegExp(t, 'i')) };
     }
 
     const results = await ResultRecord.find(query);
@@ -1024,7 +1035,9 @@ router.post('/results/batches/return', async (req, res) => {
     const query = { academicYear: cleanYear, semester: numSem };
     if (branch && branch !== 'ALL') {
       const deptKeyword = branch.replace(/^Department\s+of\s+/i, '').trim();
-      query.branch = { $regex: new RegExp(deptKeyword, 'i') };
+      const terms = [deptKeyword];
+      if (/computer/i.test(deptKeyword)) terms.push('Computer');
+      query.branch = { $in: terms.map((t) => new RegExp(t, 'i')) };
     }
 
     const updateRes = await ResultRecord.updateMany(query, {
@@ -1083,7 +1096,9 @@ router.post('/results/batches/publish', async (req, res) => {
     const query = { academicYear: cleanYear, semester: numSem };
     if (branch && branch !== 'ALL') {
       const deptKeyword = branch.replace(/^Department\s+of\s+/i, '').trim();
-      query.branch = { $regex: new RegExp(deptKeyword, 'i') };
+      const terms = [deptKeyword];
+      if (/computer/i.test(deptKeyword)) terms.push('Computer');
+      query.branch = { $in: terms.map((t) => new RegExp(t, 'i')) };
     }
 
     const results = await ResultRecord.find(query);
@@ -1193,7 +1208,9 @@ router.post('/results/batches/unpublish', async (req, res) => {
     const query = { academicYear: cleanYear, semester: numSem };
     if (branch && branch !== 'ALL') {
       const deptKeyword = branch.replace(/^Department\s+of\s+/i, '').trim();
-      query.branch = { $regex: new RegExp(deptKeyword, 'i') };
+      const terms = [deptKeyword];
+      if (/computer/i.test(deptKeyword)) terms.push('Computer');
+      query.branch = { $in: terms.map((t) => new RegExp(t, 'i')) };
     }
 
     const results = await ResultRecord.find(query);

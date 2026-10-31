@@ -228,7 +228,7 @@ export default function StudentDashboard() {
 
   const displayName = marksheetData?.studentName || studentProfile?.name || user?.name || 'AARAV RAJESH SHINDE';
   const displayPrn = marksheetData?.prn || user?.prn || '22UCO01042';
-  const displayBranch = marksheetData?.branch || studentProfile?.branch || 'Computer Engineering';
+  const displayBranch = marksheetData?.branch || studentProfile?.branch || 'Electronics and Computer Engineering';
   const displaySeat = marksheetData?.seatNo || studentProfile?.seatNo || 'SCOE24-C308';
   const displayDegree = marksheetData?.degree || studentProfile?.degree || 'Bachelor of Technology (B.Tech)';
   const displayMotherName = marksheetData?.motherName || studentProfile?.motherName || 'SUNITA';

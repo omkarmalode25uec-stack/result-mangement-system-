@@ -18,6 +18,9 @@ import { sampleMarksheets } from '../data/sampleData.js';
  */
 export const seedDatabase = async () => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/sanjivani_rms');
+    }
     // 1. Seed departments if missing
     const deptCount = await Department.countDocuments();
     if (deptCount === 0) {
@@ -108,9 +111,9 @@ export const seedDatabase = async () => {
         seatNo: 'SCOE24-C308',
         name: 'AARAV RAJESH SHINDE',
         motherName: 'SUNITA',
-        branch: 'Computer Engineering',
+        branch: 'Electronics and Computer Engineering',
         degree: 'Bachelor of Technology (B.Tech)',
-        department: 'Department of Computer Engineering',
+        department: 'Department of Electronics and Computer Engineering',
         academicYear: '2026-27',
         currentSemester: 5,
         email: 'aarav.shinde@sample.sanjivani.edu.in',
@@ -118,6 +121,8 @@ export const seedDatabase = async () => {
       });
       console.log('[Seed] Student 1 (Aarav Shinde) profile provisioned.');
     } else {
+      student1Profile.branch = 'Electronics and Computer Engineering';
+      student1Profile.department = 'Department of Electronics and Computer Engineering';
       student1Profile.academicYear = '2026-27';
       student1Profile.currentSemester = 5;
       await student1Profile.save();
